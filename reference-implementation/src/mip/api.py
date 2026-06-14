@@ -148,6 +148,23 @@ def get_program_profile(pid: str) -> dict:
     return out
 
 
+@app.get("/api/program/{pid}/lineage")
+def get_lineage(pid: str) -> dict:
+    """Field-level data lineage for a program (grammar parser: MOVE + SQL host-var<->column)."""
+    _ensure_scanned()
+    conn = _conn()
+    pid = pid.upper()
+    row = conn.execute(
+        "SELECT a.path AS src FROM program p JOIN artifact a ON a.artifact_id=p.artifact_id"
+        " WHERE p.program_id=?", (pid,)).fetchone()
+    conn.close()
+    if not row or not row["src"]:
+        return {"program_id": pid, "flows": []}
+    target = _state["source"] / row["src"]
+    text = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else ""
+    return {"program_id": pid, "flows": cobol.field_lineage(text, pid, row["src"])}
+
+
 @app.get("/api/jobs")
 def get_jobs() -> list[dict]:
     _ensure_scanned()

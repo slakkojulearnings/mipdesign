@@ -14,6 +14,7 @@ export default function ProgramDetail({ pid, onOpenProgram, back }) {
   const [srcErr, setSrcErr] = useState(null);
   const [impact, setImpact] = useState(null);
   const [impactErr, setImpactErr] = useState(null);
+  const [lineage, setLineage] = useState(null);
 
   if (loading) return <div className="loading">Loading…</div>;
   if (err) return <div className="error">{err}</div>;
@@ -31,6 +32,11 @@ export default function ProgramDetail({ pid, onOpenProgram, back }) {
     setImpactErr(null);
     try { setImpact(await api.impact(pid)); }
     catch (e) { setImpactErr(String(e)); }
+  };
+
+  const runLineage = async () => {
+    try { setLineage(await api.lineage(pid)); }
+    catch (e) { setLineage({ flows: [], error: String(e) }); }
   };
 
   return (
@@ -92,6 +98,22 @@ export default function ProgramDetail({ pid, onOpenProgram, back }) {
             )}
           </>
         ) : <div className="muted">No graph node for this id.</div>)}
+      </div>
+
+      <div className="panel">
+        <h3>Field-level data lineage
+          <button className="btn secondary" style={{ marginLeft: 8 }} onClick={runLineage}>Trace</button>
+          <span className="tag" style={{ marginLeft: 8 }}>grammar parser — MOVE + SQL host-var ↔ column</span>
+        </h3>
+        {!lineage && <div className="muted">Click “Trace” to follow data into and out of this program's fields.</div>}
+        {lineage && (lineage.flows.length === 0
+          ? <div className="muted">No field-level flows detected (no MOVE/SQL data movement parsed).</div>
+          : lineage.flows.map((f, i) => (
+              <div key={i} className="rel" style={{ padding: "2px 0" }}>
+                <span>{f.src}</span> <span className="t">→</span> <span>{f.dst}</span>{" "}
+                <span className="badge ok">{f.kind}</span> <span className="tag">{f.evidence}</span>
+              </div>
+            )))}
       </div>
 
       {d.source_path && (

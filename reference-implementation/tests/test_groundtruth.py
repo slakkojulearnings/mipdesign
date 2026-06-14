@@ -52,7 +52,10 @@ EXPECTED_CONFIRMED = {
     ("PAYUPD", "WRITES", "PAYMENT"),
     ("PAYUPD", "WRITES", "ACCT_MASTER"),
 }
-EXPECTED_DYNAMIC = ("INTDRV", "CALLS", "WS-RATE-PGM")  # must be kept + flagged
+# The grammar parser resolves the dynamic CALL (MOVE 'INTRATE1' TO WS-RATE-PGM; CALL
+# WS-RATE-PGM) by constant propagation -> an *inferred* edge to INTRATE1 (not asserted,
+# not dropped).
+EXPECTED_RESOLVED = ("INTDRV", "CALLS", "INTRATE1")
 EXPECTED_ROOTS = {"CRDPOST", "STMTDRV", "PAYDRV", "INTDRV"}
 EXPECTED_DEAD = {"DEADPROG"}
 
@@ -74,13 +77,13 @@ def _metrics():
     with tempfile.TemporaryDirectory() as d:
         conn = _build(str(Path(d) / "mip.db"))
         confirmed = _extracted(conn, "confirmed")
-        needs_review = _extracted(conn, "needs_review")
+        inferred = _extracted(conn, "inferred")
         tp = len(confirmed & EXPECTED_CONFIRMED)
         precision = tp / len(confirmed) if confirmed else 0.0
         recall = tp / len(EXPECTED_CONFIRMED)
         result = {
             "precision": precision, "recall": recall,
-            "confirmed": confirmed, "needs_review": needs_review,
+            "confirmed": confirmed, "inferred": inferred,
             "roots": set(queries.roots(conn)),
             "dead": set(queries.dead_code(conn)),
             "jobs_for_crdpost": queries.jobs_executing(conn, "CRDPOST"),
@@ -95,9 +98,10 @@ def test_precision_recall_perfect():
     assert m["precision"] == 1.0, f"spurious edges: {m['confirmed'] - EXPECTED_CONFIRMED}"
 
 
-def test_dynamic_call_kept_and_flagged():
+def test_dynamic_call_resolved():
     m = _metrics()
-    assert EXPECTED_DYNAMIC in m["needs_review"], "dynamic CALL must be kept as needs_review"
+    # the grammar parser resolves the dynamic CALL to its literal target, as `inferred`
+    assert EXPECTED_RESOLVED in m["inferred"], "dynamic CALL should resolve to INTRATE1 (inferred)"
 
 
 def test_roots_detected():
@@ -117,10 +121,10 @@ if __name__ == "__main__":
     print(f"precision = {m['precision']:.3f}   recall = {m['recall']:.3f}")
     print(f"roots     = {sorted(m['roots'])}")
     print(f"dead code = {sorted(m['dead'])}")
-    print(f"needs_review edges = {sorted(m['needs_review'])}")
+    print(f"resolved (inferred) edges = {sorted(m['inferred'])}")
     print(f"jobs executing CRDPOST = {m['jobs_for_crdpost']}")
     ok = (m["precision"] == 1.0 and m["recall"] == 1.0
           and m["roots"] == EXPECTED_ROOTS and m["dead"] == EXPECTED_DEAD
-          and EXPECTED_DYNAMIC in m["needs_review"])
+          and EXPECTED_RESOLVED in m["inferred"])
     print("ALL CHECKS PASSED" if ok else "CHECKS FAILED")
     sys.exit(0 if ok else 1)
