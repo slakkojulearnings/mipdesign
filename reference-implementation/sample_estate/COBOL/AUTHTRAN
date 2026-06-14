@@ -1,0 +1,26 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. AUTHTRAN.
+       AUTHOR. MIP-SAMPLE.
+      *----------------------------------------------------------------
+      * Online authorization transaction (CICS). Entered from a terminal
+      * transaction (no batch job runs it) -> an ONLINE ROOT.
+      * Demonstrates the CICS layer: RECEIVE/SEND MAP, READ FILE, LINK.
+      *----------------------------------------------------------------
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       COPY CARDREC.
+       PROCEDURE DIVISION.
+       0000-MAIN.
+           EXEC CICS RECEIVE MAP('AUTHMAP') MAPSET('AUTHSET')
+           END-EXEC.
+           EXEC CICS READ FILE('CARDFILE')
+                INTO(CARD-RECORD) RIDFLD(CARD-NUMBER)
+           END-EXEC.
+           EXEC CICS LINK PROGRAM('AUTHVAL')
+                COMMAREA(CARD-RECORD)
+           END-EXEC.
+           EXEC CICS SEND MAP('AUTHMAP') MAPSET('AUTHSET')
+           END-EXEC.
+           EXEC CICS RETURN
+           END-EXEC.
+           GOBACK.

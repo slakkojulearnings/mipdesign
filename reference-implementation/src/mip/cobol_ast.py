@@ -54,6 +54,7 @@ class Unit:
     calls: list = field(default_factory=list)      # {target, kind, via?, line, confidence, validation}
     copies: list = field(default_factory=list)      # {name, line}
     sql: list = field(default_factory=list)         # {op, table, line}  (READS/WRITES)
+    cics: list = field(default_factory=list)        # online edges {rel, ttype, target, kind, line, confidence, validation}
     field_flows: list = field(default_factory=list)  # {src, dst, kind, line}
     counts: dict = field(default_factory=dict)
     complexity: int = 1
@@ -89,6 +90,9 @@ def parse(text: str) -> Unit:
     u.divisions = [d for d in DIVISIONS if f"{d} DIVISION" in up]
 
     lines = [(i, l) for i, l in enumerate(text.splitlines(), 1) if not _is_comment(l)]
+    # comment-blanked copy (same line count -> line numbers preserved) so EXEC SQL/CICS
+    # mentioned inside comments can't poison block detection.
+    code_text = "\n".join("" if _is_comment(l) else l for l in text.splitlines())
 
     # ---- DATA DIVISION items + COPY (anywhere) ----
     proc_pos = up.find("PROCEDURE DIVISION")
@@ -106,10 +110,15 @@ def parse(text: str) -> Unit:
                                  "pic": pic.group(1) if pic else None, "line": ln})
 
     # ---- EXEC SQL blocks: READS/WRITES tables + field lineage ----
-    for m in _SQL_BLOCK.finditer(text):
-        body, ln = m.group(1), _line_of(text, m.start())
+    for m in _SQL_BLOCK.finditer(code_text):
+        body, ln = m.group(1), _line_of(code_text, m.start())
         u.sql.extend(_sql_edges(body, ln))
         u.field_flows.extend(_sql_lineage(body, ln))
+
+    # ---- EXEC CICS blocks: the online execution layer ----
+    for m in _CICS_BLOCK.finditer(code_text):
+        body, ln = m.group(1), _line_of(code_text, m.start())
+        u.cics.extend(_cics_edges(body, ln))
 
     # ---- PROCEDURE DIVISION: paragraphs, statements, calls, moves, const-prop ----
     if proc_pos >= 0:
@@ -239,3 +248,67 @@ def _sql_lineage(body: str, ln: int) -> list[dict]:
             flows.append({"src": hv.upper(), "dst": f"{table}.{col.upper()}",
                           "kind": "sql-write", "line": ln})
     return flows
+
+
+# --- EXEC CICS helpers (the online layer) ----------------------------------
+_CICS_BLOCK = re.compile(r"(?is)EXEC\s+CICS(.*?)END-EXEC")
+_ARG = r"('[^']*'|\"[^\"]*\"|[A-Za-z][\w-]*)"
+
+
+def _cics_arg(keyword: str, body: str) -> tuple[str, bool] | None:
+    """Return (NAME, is_literal) for a CICS option like PROGRAM('X') / FILE(WS-F)."""
+    m = re.search(rf"(?i)\b(?:{keyword})\s*\(\s*{_ARG}\s*\)", body)
+    if not m:
+        return None
+    raw = m.group(1)
+    lit = raw[0] in "'\""
+    return (raw.strip("'\"").upper(), lit)
+
+
+def _cics_edges(body: str, ln: int) -> list[dict]:
+    """Map one EXEC CICS command to MIP edges. LINK/XCTL are online program calls;
+    file/queue ops are reads/writes; MAP ops use a screen; START starts a transaction."""
+    verb_m = re.match(r"(?is)\s*([A-Z]+)", body)
+    if not verb_m:
+        return []
+    verb = verb_m.group(1).upper()
+    edges: list[dict] = []
+
+    def emit(rel, ttype, name_lit):
+        name, lit = name_lit
+        if lit:
+            edges.append({"rel": rel, "ttype": ttype, "target": name, "kind": "cics",
+                          "confidence": 1.0, "validation": "confirmed", "line": ln})
+        else:  # dynamic target (e.g. LINK PROGRAM(WS-PGM)) — kept + flagged
+            edges.append({"rel": rel, "ttype": ttype, "target": name, "kind": "cics",
+                          "confidence": 0.3, "validation": "needs_review", "line": ln})
+
+    if verb in ("LINK", "XCTL"):
+        a = _cics_arg("PROGRAM", body)
+        if a:
+            emit("CALLS", "program", a)
+    elif verb in ("READ", "READNEXT", "STARTBR"):
+        a = _cics_arg("FILE|DATASET", body)
+        if a:
+            emit("READS", "dataset", a)
+    elif verb in ("WRITE", "REWRITE", "DELETE"):
+        a = _cics_arg("FILE|DATASET", body)
+        if a:
+            emit("WRITES", "dataset", a)
+    elif verb in ("SEND", "RECEIVE"):
+        a = _cics_arg("MAP", body)
+        if a:
+            emit("USES", "screen", a)
+    elif verb == "READQ":
+        a = _cics_arg("QUEUE|QNAME", body)
+        if a:
+            emit("READS", "queue", a)
+    elif verb == "WRITEQ":
+        a = _cics_arg("QUEUE|QNAME", body)
+        if a:
+            emit("WRITES", "queue", a)
+    elif verb == "START":
+        a = _cics_arg("TRANSID", body)
+        if a:
+            emit("STARTS", "transaction", a)
+    return edges

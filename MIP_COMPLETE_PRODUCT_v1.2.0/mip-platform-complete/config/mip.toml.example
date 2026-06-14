@@ -1,0 +1,13 @@
+[storage]
+database = "data/mip.db"
+output_dir = "output"
+
+[scan]
+max_file_size_mb = 20
+include_hidden = false
+follow_symlinks = false
+ignored_directories = [".git", ".venv", "node_modules", "target", "build", "dist"]
+
+[analysis]
+extract_business_rules = true
+max_rule_length = 500

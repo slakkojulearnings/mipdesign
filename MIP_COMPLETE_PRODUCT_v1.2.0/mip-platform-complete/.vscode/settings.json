@@ -1,0 +1,16 @@
+{
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["tests"],
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+  "files.watcherExclude": {
+    "**/data/*.db*": true,
+    "**/output/**": true,
+    "**/mfcode/**": true
+  }
+}

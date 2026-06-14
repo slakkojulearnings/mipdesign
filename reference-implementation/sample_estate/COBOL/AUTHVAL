@@ -1,0 +1,20 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. AUTHVAL.
+       AUTHOR. MIP-SAMPLE.
+      *----------------------------------------------------------------
+      * Online authorization validation. Invoked via EXEC CICS LINK from
+      * AUTHTRAN. Logs the decision to a temporary-storage queue.
+      *----------------------------------------------------------------
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       COPY CARDREC.
+       PROCEDURE DIVISION.
+       0000-MAIN.
+           IF CARD-STATUS = 'A'
+              EXEC CICS WRITEQ TS QUEUE('AUTHLOG')
+                   FROM(CARD-RECORD)
+              END-EXEC
+           END-IF.
+           EXEC CICS RETURN
+           END-EXEC.
+           GOBACK.

@@ -1,0 +1,3 @@
+ADVASM   CSECT
+         CALL ADVHELP
+         END

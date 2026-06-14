@@ -45,6 +45,12 @@ def extract_edges(text: str, program: str, rel_path: str) -> list[Edge]:
     for s in u.sql:
         add(s["op"], "db2_table", s["table"], Evidence.confirmed(f"{rel_path}:{s['line']}"))
 
+    for cx in u.cics:                               # online layer (EXEC CICS)
+        src = f"{rel_path}:{cx['line']}"
+        ev = Evidence(source_evidence=src, discovery_method="cics",
+                      confidence=cx["confidence"], validation_status=cx["validation"])
+        add(cx["rel"], cx["ttype"], cx["target"], ev)
+
     seen = {e.relationship_id: e for e in edges}   # dedupe identical edges
     return list(seen.values())
 

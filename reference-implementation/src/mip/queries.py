@@ -50,11 +50,16 @@ def callers(conn: sqlite3.Connection, program: str) -> list[dict]:
 
 
 def roots(conn: sqlite3.Connection) -> list[str]:
+    # batch roots: executed by a job. online roots: programs that issue EXEC CICS
+    # (discovery_method='cics') — entered via a transaction, not a job. Either way, a
+    # root is an entry point that nothing else calls.
     executed = {r["target_id"] for r in conn.execute(
         "SELECT target_id FROM relationship WHERE rel_type='EXECUTES' AND target_type='program'")}
+    online = {r["source_id"] for r in conn.execute(
+        "SELECT DISTINCT source_id FROM relationship WHERE discovery_method='cics'")}
     called = {r["target_id"] for r in conn.execute(
         "SELECT target_id FROM relationship WHERE rel_type='CALLS'")}
-    return sorted(executed - called)
+    return sorted((executed | online) - called)
 
 
 def dead_code(conn: sqlite3.Connection) -> list[str]:

@@ -1,0 +1,30 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "MIP: Install",
+      "type": "shell",
+      "command": "python -m pip install -e \".[dev]\"",
+      "problemMatcher": []
+    },
+    {
+      "label": "MIP: Test",
+      "type": "shell",
+      "command": "pytest -q",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "MIP: Analyze Demo",
+      "type": "shell",
+      "command": "mip analyze examples/sample-mainframe --db data/demo.db --output output/demo",
+      "problemMatcher": []
+    },
+    {
+      "label": "MIP: Serve API",
+      "type": "shell",
+      "command": "mip serve --db data/demo.db",
+      "problemMatcher": []
+    }
+  ]
+}

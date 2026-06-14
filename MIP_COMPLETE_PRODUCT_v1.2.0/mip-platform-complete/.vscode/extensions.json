@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "github.copilot",
+    "github.copilot-chat",
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "charliermarsh.ruff",
+    "yzhang.markdown-all-in-one",
+    "qwtel.sqlite-viewer"
+  ]
+}

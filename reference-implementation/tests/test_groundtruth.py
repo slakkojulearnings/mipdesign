@@ -51,12 +51,20 @@ EXPECTED_CONFIRMED = {
     ("BALUPD", "WRITES", "CARD_MASTER"),
     ("PAYUPD", "WRITES", "PAYMENT"),
     ("PAYUPD", "WRITES", "ACCT_MASTER"),
+    # online (EXEC CICS) layer
+    ("AUTHTRAN", "USES", "CARDREC"),        # COPY
+    ("AUTHTRAN", "USES", "AUTHMAP"),        # SEND/RECEIVE MAP (screen)
+    ("AUTHTRAN", "READS", "CARDFILE"),      # CICS READ FILE (dataset)
+    ("AUTHTRAN", "CALLS", "AUTHVAL"),       # CICS LINK (online call)
+    ("AUTHVAL", "USES", "CARDREC"),
+    ("AUTHVAL", "WRITES", "AUTHLOG"),       # CICS WRITEQ TS (queue)
 }
 # The grammar parser resolves the dynamic CALL (MOVE 'INTRATE1' TO WS-RATE-PGM; CALL
 # WS-RATE-PGM) by constant propagation -> an *inferred* edge to INTRATE1 (not asserted,
 # not dropped).
 EXPECTED_RESOLVED = ("INTDRV", "CALLS", "INTRATE1")
-EXPECTED_ROOTS = {"CRDPOST", "STMTDRV", "PAYDRV", "INTDRV"}
+# AUTHTRAN is an ONLINE root (entered via a CICS transaction, not a job, and not called).
+EXPECTED_ROOTS = {"CRDPOST", "STMTDRV", "PAYDRV", "INTDRV", "AUTHTRAN"}
 EXPECTED_DEAD = {"DEADPROG"}
 
 
