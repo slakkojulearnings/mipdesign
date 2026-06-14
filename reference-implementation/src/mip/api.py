@@ -182,7 +182,23 @@ def get_graph() -> dict:
     out = queries.call_graph(conn)
     ins = queries.graph_insights(conn)
     ins["critical_by_pagerank"] = graphx.centrality(conn)   # NetworkX PageRank
+    comm = graphx.communities(conn)                         # Louvain communities
+    ins["community_count"] = len(comm["communities"])
+    ins["modularity"] = comm["modularity"]
+    nc = comm["node_community"]
+    for node in out["nodes"]:
+        node["community"] = nc.get(node["id"])
     out["insights"] = ins
+    conn.close()
+    return out
+
+
+@app.get("/api/communities")
+def get_communities() -> dict:
+    """Inferred applications/domains via Louvain community detection."""
+    _ensure_scanned()
+    conn = _conn()
+    out = graphx.communities(conn)
     conn.close()
     return out
 

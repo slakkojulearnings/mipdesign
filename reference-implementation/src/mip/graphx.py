@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import sqlite3
 
+from .queries import _CAP_TOKENS  # naming-convention dictionary for labeling clusters
+
 _DEP_RELS = ("CALLS", "EXECUTES", "USES", "READS", "WRITES")
 
 
@@ -128,3 +130,74 @@ def centrality(conn: sqlite3.Connection, top: int = 5,
                      if g.nodes.get(x, {}).get("kind") == "program"),
                     key=lambda kv: -kv[1])[:top]
     return [{"program": x, "pagerank": round(s, 4)} for x, s in ranked]
+
+
+def _label_set(names) -> str:
+    """Infer a capability label for a cluster from program-name conventions."""
+    counts: dict[str, int] = {}
+    for nm in names:
+        for tok, word in _CAP_TOKENS.items():
+            if word and tok in nm:
+                counts[word] = counts.get(word, 0) + 1
+    if not counts:
+        return "Unlabeled"
+    top = sorted(counts.items(), key=lambda kv: -kv[1])[:2]
+    return " / ".join(w for w, _ in top)
+
+
+def communities(conn: sqlite3.Connection) -> dict:
+    """Application/domain boundary detection via Louvain community detection.
+
+    Builds an undirected, weighted program-coupling graph (program↔program from CALLS,
+    plus programs coupled when they share a copybook/table) and runs Louvain. Each
+    community is an inferred application/domain — labeled from naming conventions and
+    flagged `inferred` (Principle 1: never asserted as ground truth).
+    Realizes CORE_ALGORITHMS.md §5.
+    """
+    import networkx as nx
+
+    g = build_graph(conn)
+    progs = {n for n, d in g.nodes(data=True) if d.get("kind") == "program"}
+
+    cup = nx.Graph()
+    cup.add_nodes_from(progs)
+
+    def bump(a, b, w):
+        cur = cup.get_edge_data(a, b, default={}).get("weight", 0)
+        cup.add_edge(a, b, weight=cur + w)
+
+    # direct calls couple strongly
+    for u, v, d in g.edges(data=True):
+        if d["rel_type"] == "CALLS" and u in progs and v in progs:
+            bump(u, v, 2)
+    # programs sharing a copybook/table are coupled (1 per shared resource)
+    users: dict[str, set] = {}
+    for u, v, d in g.edges(data=True):
+        if d["rel_type"] in ("USES", "READS", "WRITES") and u in progs:
+            users.setdefault(v, set()).add(u)
+    for members in users.values():
+        ms = sorted(members)
+        for i in range(len(ms)):
+            for k in range(i + 1, len(ms)):
+                bump(ms[i], ms[k], 1)
+
+    if cup.number_of_nodes() == 0:
+        return {"communities": [], "modularity": 0.0, "node_community": {}}
+
+    comms = nx.community.louvain_communities(cup, weight="weight", seed=42)
+    comms = sorted(comms, key=len, reverse=True)
+    try:
+        mod = round(nx.community.modularity(cup, comms, weight="weight"), 3)
+    except Exception:
+        mod = None
+
+    out, node_community = [], {}
+    for i, members in enumerate(comms):
+        ms = sorted(members)
+        for m in ms:
+            node_community[m] = i
+        out.append({
+            "id": i, "label": _label_set(ms), "members": ms, "size": len(ms),
+            "confidence": 0.5, "validation_status": "inferred",
+        })
+    return {"communities": out, "modularity": mod, "node_community": node_community}

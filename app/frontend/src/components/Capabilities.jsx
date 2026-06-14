@@ -4,6 +4,7 @@ import { useData } from "../hooks.js";
 
 export default function Capabilities({ onOpenProgram }) {
   const { data, err, loading } = useData(() => api.capabilities());
+  const { data: comm } = useData(() => api.communities());
   if (loading) return <div className="loading">Loading…</div>;
   if (err) return <div className="error">{err}</div>;
 
@@ -15,6 +16,34 @@ export default function Capabilities({ onOpenProgram }) {
         Labels are <strong>inferred</strong> from naming + structure (confidence-scored), never asserted as ground truth.
       </p>
 
+      {comm && comm.communities.length > 0 && (
+        <div className="panel" style={{ marginBottom: 18 }}>
+          <h3>Structural communities — Louvain
+            <span className="tag" style={{ marginLeft: 8 }}>
+              {comm.communities.length} domains · modularity {comm.modularity}
+            </span>
+          </h3>
+          <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>
+            Application/domain boundaries detected from the dependency graph (calls + shared
+            copybooks/tables) — independent of naming. Inferred; review before trusting.
+          </p>
+          <div className="cap-grid">
+            {comm.communities.map((c) => (
+              <div className="cap-card" key={c.id}>
+                <h3>{c.label} <span className="badge review">community {c.id} · inferred</span></h3>
+                <div className="root">{c.size} programs</div>
+                <div className="cap-sec">
+                  {c.members.map((m) => (
+                    <span key={m} className="pill click" onClick={() => onOpenProgram(m)}>{m}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <h3 style={{ margin: "0 0 12px" }}>Capability map (root-driven)</h3>
       <div className="cap-grid">
         {data.map((c) => (
           <div className="cap-card" key={c.root}>

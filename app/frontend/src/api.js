@@ -17,6 +17,7 @@ export const api = {
   deadcode: () => fetch("/api/deadcode").then(j),
   graph: () => fetch("/api/graph").then(j),
   capabilities: () => fetch("/api/capabilities").then(j),
+  communities: () => fetch("/api/communities").then(j),
   insights: () => fetch("/api/insights").then(j),
   query: (question) =>
     fetch("/api/query", {

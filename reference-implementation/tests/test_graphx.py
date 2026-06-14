@@ -57,3 +57,19 @@ def test_unknown_target_is_graceful():
     r = graphx.blast_radius(conn, "NOSUCHPGM")
     conn.close()
     assert r["found"] is False and r["impacted"] == []
+
+
+def test_louvain_communities():
+    # Card-posting programs (call + shared CARDREC/CARD_MASTER) should land together,
+    # and the estate should resolve into more than one community.
+    conn = _conn()
+    c = graphx.communities(conn)
+    conn.close()
+    assert len(c["communities"]) >= 2
+    nc = c["node_community"]
+    assert nc["CRDPOST"] == nc["CRDVAL"]                       # caller + callee, shared CARDREC
+    assert nc["PAYDRV"] == nc["PAYUPD"]                        # payment cluster
+    assert nc["CRDPOST"] != nc["PAYDRV"]                       # distinct domains
+    assert c["modularity"] and c["modularity"] > 0            # non-trivial structure
+    # labels are inferred, never asserted as fact
+    assert all(x["validation_status"] == "inferred" for x in c["communities"])

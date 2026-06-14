@@ -153,7 +153,8 @@ export default function CallGraph({ onOpenProgram }) {
               <div style={{ marginBottom: 10 }}>
                 <span className="tag">{sel.node.type}</span>{" "}
                 {sel.node.is_root && <span className="badge root">root</span>}{" "}
-                {sel.node.is_dead && <span className="badge dead">dead</span>}
+                {sel.node.is_dead && <span className="badge dead">dead</span>}{" "}
+                {sel.node.community != null && <span className="badge ok">community {sel.node.community}</span>}
               </div>
               {sel.node.type === "program" ? (
                 profile ? (
