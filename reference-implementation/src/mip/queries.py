@@ -43,7 +43,7 @@ def program_dependencies(conn: sqlite3.Connection, program: str) -> list[dict]:
 def callers(conn: sqlite3.Connection, program: str) -> list[dict]:
     rows = conn.execute(
         "SELECT source_id, rel_type, validation_status, confidence FROM relationship"
-        " WHERE target_id = ? AND rel_type IN ('CALLS','EXECUTES') ORDER BY source_id",
+        " WHERE target_id = ? AND rel_type IN ('CALLS','EXECUTES','STARTS') ORDER BY source_id",
         (program.upper(),),
     )
     return [dict(r) for r in rows]

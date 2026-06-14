@@ -144,8 +144,52 @@ def parse(text: str) -> Unit:
     return u
 
 
+_ARITH = {"ADD", "SUBTRACT", "MULTIPLY", "DIVIDE"}
+_ARITH_SEP = ("TO", "FROM", "INTO", "BY")
+
+
+def _group_items(items: list[dict]) -> set[str]:
+    """Names of group data items (an item whose next sibling has a deeper level)."""
+    groups = set()
+    for a, b in zip(items, items[1:]):
+        if b["level"] > a["level"]:
+            groups.add(a["name"])
+    return groups
+
+
+def _clause(toks: list[tuple[str, int]], i: int) -> tuple[list[str], int]:
+    """Tokens of the statement starting after index i, up to '.' or the next verb."""
+    j = i + 1
+    out = []
+    while j < len(toks) and toks[j][0] != "." and toks[j][0].upper() not in _VERBS:
+        out.append(toks[j][0])
+        j += 1
+    return out, j
+
+
+def _arith_flows(clause: list[str]) -> list[tuple[str, str]]:
+    """Source->target field derivations for ADD/SUBTRACT/MULTIPLY/DIVIDE."""
+    up = [c.upper() for c in clause]
+    words = [w for w in up if re.fullmatch(_WORD, w)]
+
+    def w(seq):
+        return [x for x in seq if re.fullmatch(_WORD, x)]
+
+    if "GIVING" in up:
+        gi = up.index("GIVING")
+        srcs, tgts = w(up[:gi]), w(up[gi + 1:])
+    else:
+        sep = next((k for k in _ARITH_SEP if k in up), None)
+        if sep is None:
+            return []
+        si = up.index(sep)
+        srcs, tgts = w(up[:si]), w(up[si + 1:])
+    return [(s, t) for s in srcs for t in tgts if s != t]
+
+
 def _parse_procedure(toks: list[tuple[str, int]], u: Unit) -> None:
     const: dict[str, str] = {}      # var -> resolved literal (constant propagation)
+    groups = _group_items(u.data_items)
     n = len(toks)
     i = 0
     while i < n:
@@ -168,8 +212,9 @@ def _parse_procedure(toks: list[tuple[str, int]], u: Unit) -> None:
                     const[t] = lit
             elif re.fullmatch(_WORD, src):                    # field-to-field flow
                 s = src.upper()
+                kind = "move-group" if s in groups else "move"   # group move = all sub-fields
                 for t in targets:
-                    u.field_flows.append({"src": s, "dst": t, "kind": "move", "line": ln})
+                    u.field_flows.append({"src": s, "dst": t, "kind": kind, "line": ln})
                     if s in const:
                         const[t] = const[s]
                     else:
@@ -195,6 +240,24 @@ def _parse_procedure(toks: list[tuple[str, int]], u: Unit) -> None:
                     u.calls.append({"target": var, "kind": "dynamic", "line": ln,
                                     "confidence": 0.3, "validation": "needs_review"})
             i += 2
+            continue
+
+        if T == "COMPUTE":                                   # COMPUTE t = expr(a, b, …)
+            clause, j = _clause(toks, i)
+            if clause and re.fullmatch(_WORD, clause[0]):
+                target = clause[0].upper()
+                for w in clause[1:]:
+                    if re.fullmatch(_WORD, w):
+                        u.field_flows.append({"src": w.upper(), "dst": target,
+                                              "kind": "compute", "line": ln})
+            i = j
+            continue
+
+        if T in _ARITH:                                      # ADD/SUBTRACT/MULTIPLY/DIVIDE
+            clause, j = _clause(toks, i)
+            for s, d in _arith_flows(clause):
+                u.field_flows.append({"src": s, "dst": d, "kind": "arith", "line": ln})
+            i = j
             continue
 
         i += 1

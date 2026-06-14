@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from . import cobol, graphx, qlog, queries, store
+from . import cobol, graphx, parser_backend, qlog, queries, store
 from .pipeline import build_db
 
 _PKG_ROOT = Path(__file__).resolve().parents[2]          # reference-implementation/
@@ -73,7 +73,8 @@ class QueryIn(BaseModel):
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok", "source": str(_state["source"]),
-            "source_exists": _state["source"].exists()}
+            "source_exists": _state["source"].exists(),
+            "parser": parser_backend.backend_info()}
 
 
 @app.post("/api/scan", response_model=ScanResult)

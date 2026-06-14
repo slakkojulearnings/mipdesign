@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import cobol, jcl, scanner, store
+from . import cics_csd, cobol, jcl, scanner, store
 from .records import Program
 
 
@@ -46,6 +46,11 @@ def build_db(estate_path: str | Path, db_path: str | Path) -> dict:
                 store.insert_job_step(conn, s)
                 counts["steps"] += 1
             for e in edges:
+                store.insert_edge(conn, e)
+                counts["edges"] += 1
+
+        elif a.artifact_type == "cics":          # CSD/RDO: transaction -> program
+            for e in cics_csd.extract_edges(text, a.path):
                 store.insert_edge(conn, e)
                 counts["edges"] += 1
 

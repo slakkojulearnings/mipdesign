@@ -1,0 +1,14 @@
+*--------------------------------------------------------------------
+* CICS resource definitions (DFHCSDUP). Maps online transactions to
+* their entry programs. AUTH -> AUTHTRAN (the online auth transaction).
+*--------------------------------------------------------------------
+DEFINE TRANSACTION(AUTH) GROUP(AUTHGRP)
+       PROGRAM(AUTHTRAN)
+       DESCRIPTION(ONLINE CARD AUTHORIZATION)
+       TASKDATALOC(ANY)
+
+DEFINE PROGRAM(AUTHTRAN) GROUP(AUTHGRP)
+       LANGUAGE(COBOL) DATALOCATION(ANY)
+
+DEFINE PROGRAM(AUTHVAL) GROUP(AUTHGRP)
+       LANGUAGE(COBOL) DATALOCATION(ANY)

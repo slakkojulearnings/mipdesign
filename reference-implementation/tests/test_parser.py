@@ -58,3 +58,48 @@ def test_data_items_parsed():
     u = cobol_ast.parse(_src("COBOL/CRDVAL"))
     names = {d["name"] for d in u.data_items}
     assert "LK-RETURN-CODE" in names
+
+
+_ARITH_SNIPPET = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ARITH.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 PRICE PIC 9(5).
+       01 TAX   PIC 9(5).
+       01 TOTAL PIC 9(6).
+       PROCEDURE DIVISION.
+       0000-MAIN.
+           COMPUTE TOTAL = PRICE + TAX.
+           ADD TAX TO TOTAL.
+           GOBACK.
+"""
+
+
+def test_compute_and_add_lineage():
+    flows = {(f["src"], f["dst"], f["kind"])
+             for f in cobol.field_lineage(_ARITH_SNIPPET, "ARITH", "ARITH")}
+    assert ("PRICE", "TOTAL", "compute") in flows
+    assert ("TAX", "TOTAL", "compute") in flows
+    assert ("TAX", "TOTAL", "arith") in flows           # ADD TAX TO TOTAL
+
+
+def test_group_move_flagged():
+    snippet = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. GRP.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 IN-REC.
+          05 IN-A PIC X(4).
+       01 OUT-REC.
+          05 OUT-A PIC X(4).
+       PROCEDURE DIVISION.
+       0000-MAIN.
+           MOVE IN-REC TO OUT-REC.
+           GOBACK.
+"""
+    flows = {(f["src"], f["dst"], f["kind"])
+             for f in cobol.field_lineage(snippet, "GRP", "GRP")}
+    assert ("IN-REC", "OUT-REC", "move-group") in flows  # group item move
+

@@ -21,6 +21,15 @@ wheels = [
 ]
 
 [[package]]
+name = "antlr4-python3-runtime"
+version = "4.13.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/5f/2cdf6f7aca3b20d3f316e9f505292e1f256a32089bd702034c29ebde6242/antlr4_python3_runtime-4.13.2.tar.gz", hash = "sha256:909b647e1d2fc2b70180ac586df3933e38919c85f98ccc656a96cd3f25ef3916", size = 117467 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/89/03/a851e84fcbb85214dc637b6378121ef9a0dd61b4c65264675d8a5c9b1ae7/antlr4_python3_runtime-4.13.2-py3-none-any.whl", hash = "sha256:fe3835eb8d33daece0e799090eda89719dbccee7aa39ef94eed3818cafa5a7e8", size = 144462 },
+]
+
+[[package]]
 name = "anyio"
 version = "4.13.0"
 source = { registry = "https://pypi.org/simple" }
@@ -168,6 +177,9 @@ version = "0.1.0"
 source = { editable = "." }
 
 [package.optional-dependencies]
+advanced = [
+    { name = "antlr4-python3-runtime" },
+]
 api = [
     { name = "fastapi" },
     { name = "networkx" },
@@ -184,6 +196,7 @@ graph = [
 
 [package.metadata]
 requires-dist = [
+    { name = "antlr4-python3-runtime", marker = "extra == 'advanced'", specifier = ">=4.13" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.110" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "networkx", marker = "extra == 'api'", specifier = ">=3.0" },
@@ -192,7 +205,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.27" },
 ]
-provides-extras = ["graph", "dev", "api"]
+provides-extras = ["graph", "advanced", "dev", "api"]
 
 [[package]]
 name = "networkx"

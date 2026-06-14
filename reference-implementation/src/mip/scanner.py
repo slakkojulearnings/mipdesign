@@ -37,6 +37,8 @@ def classify(text: str, path: Path) -> str:
         return "cobol"
     if "CREATE TABLE" in up:
         return "db2"
+    if "DEFINE TRANSACTION" in up or "DEFINE PROGRAM" in up or "DFHCSDUP" in up:
+        return "cics"      # CICS CSD/RDO resource definitions
     if _LEVEL_LINE.search(text) and "PIC" in up:
         return "copybook"  # COBOL data layout without a PROGRAM-ID
 

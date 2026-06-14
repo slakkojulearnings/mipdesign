@@ -58,6 +58,7 @@ EXPECTED_CONFIRMED = {
     ("AUTHTRAN", "CALLS", "AUTHVAL"),       # CICS LINK (online call)
     ("AUTHVAL", "USES", "CARDREC"),
     ("AUTHVAL", "WRITES", "AUTHLOG"),       # CICS WRITEQ TS (queue)
+    ("AUTH", "STARTS", "AUTHTRAN"),         # CSD: transaction -> entry program
 }
 # The grammar parser resolves the dynamic CALL (MOVE 'INTRATE1' TO WS-RATE-PGM; CALL
 # WS-RATE-PGM) by constant propagation -> an *inferred* edge to INTRATE1 (not asserted,

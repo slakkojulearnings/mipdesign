@@ -7,22 +7,22 @@ not asserted); truly unresolved ones stay `needs_review`.
 
 from __future__ import annotations
 
-from . import cobol_ast
+from . import parser_backend
 from .records import Edge, Evidence
 
 
 def program_id(text: str) -> str | None:
-    return cobol_ast.parse(text).program_id
+    return parser_backend.parse(text).program_id
 
 
 def structure(text: str) -> dict:
-    u = cobol_ast.parse(text)
+    u = parser_backend.parse(text)
     return {"divisions": u.divisions, "paragraphs": u.paragraphs,
             "counts": u.counts, "complexity": u.complexity}
 
 
 def extract_edges(text: str, program: str, rel_path: str) -> list[Edge]:
-    u = cobol_ast.parse(text)
+    u = parser_backend.parse(text)
     edges: list[Edge] = []
 
     def add(rel, ttype, target, ev):
@@ -56,8 +56,8 @@ def extract_edges(text: str, program: str, rel_path: str) -> list[Edge]:
 
 
 def field_lineage(text: str, program: str, rel_path: str) -> list[dict]:
-    """Field-level data lineage: MOVE field->field and SQL host-var <-> column."""
-    u = cobol_ast.parse(text)
+    """Field-level data lineage: MOVE/COMPUTE/ADD field->field and SQL host-var <-> column."""
+    u = parser_backend.parse(text)
     return [{"program": program, "src": f["src"], "dst": f["dst"],
              "kind": f["kind"], "evidence": f"{rel_path}:{f['line']}"}
             for f in u.field_flows]
