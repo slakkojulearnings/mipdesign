@@ -1,0 +1,40 @@
+MIP Skills Framework (V2 — aligned to V2 Prompt Library)
+
+Shared foundation (read first):
+    MIP_ENGINEERING_PRINCIPLES.md
+    -> 8 principles every skill inherits: Evidence-First/Confidence-Aware,
+       Resilience (graceful degradation), Explainability/Auditability, System
+       Thinking, Graph-Ready Output, Business-Context Awareness, Layered
+       Intelligence, Scope Discipline.
+
+12 production-grade skills. Each follows the standard format:
+    Purpose, Inputs, Outputs, Responsibilities, Constraints,
+    Success Criteria, Examples, Review Checklist
+    (+ Principles Applied, Collaborates With)
+
+Core engineering & platform:
+    repository-engineer/skill.md
+    metadata-modeler/skill.md
+    sqlite-engineer/skill.md
+    test-engineer/skill.md
+    code-reviewer/skill.md
+    documentation-writer/skill.md
+
+Discovery & intelligence:
+    mainframe-code-analyst/skill.md          (facts, AST, CFG/DFG, complexity)
+    graph-engineer/skill.md                  (knowledge graph + graph algorithms + blast radius)
+    mainframe-modernization-architect/skill.md
+
+New in V2 (close the prompt-library capability gaps):
+    resilience-engineer/skill.md             (SPOFs, recovery paths, resilience score)
+    security-compliance-analyst/skill.md     (PII/financial/regulatory data, lineage, compliance impact)
+    business-capability-analyst/skill.md     (capabilities, applications, domains)
+
+Key V2 change — resilience:
+    The old absolutist constraint "Never assume. Never infer." has been replaced
+    across all skills with a confidence-scoring + graceful-degradation model.
+    Inference is allowed when LABELED with discovery method + confidence +
+    validation status (Confirmed / Inferred / Needs Review) and flagged for
+    review. The platform tolerates missing metadata, partial source, dynamic
+    calls, and undocumented interfaces instead of failing — which is what makes
+    the system resilient and able to understand the complete system.

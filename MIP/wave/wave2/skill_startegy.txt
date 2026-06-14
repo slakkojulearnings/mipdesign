@@ -1,0 +1,21 @@
+Skills Strategy
+
+Each skill should have:
+
+Purpose
+
+Inputs
+
+Outputs
+
+Responsibilities
+
+Constraints
+
+Success Criteria
+
+Examples
+
+Review Checklist
+
+Exactly as we discussed.

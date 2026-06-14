@@ -1,0 +1,34 @@
+Create:
+
+.github/
+├── copilot-instructions.md
+
+.skills/
+├── repository-discovery/
+│   └── skill.md
+│
+├── cobol-analysis/
+│   └── skill.md
+│
+├── jcl-analysis/
+│   └── skill.md
+│
+├── db2-lineage/
+│   └── skill.md
+│
+├── graph-builder/
+│   └── skill.md
+│
+├── impact-analysis/
+│   └── skill.md
+│
+└── modernization-advisor/
+    └── skill.md
+
+This gives you:
+
+Reusable skills
+Consistent outputs
+Repeatable workflows
+Team adoption
+Better Copilot results

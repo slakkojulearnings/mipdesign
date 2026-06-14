@@ -1,0 +1,8 @@
+//DAILYCRD JOB (ACCT),'DAILY CARD POST',CLASS=A,MSGCLASS=X
+//*--------------------------------------------------------------
+//* Daily card posting batch job. Entry point -> CRDPOST.
+//*--------------------------------------------------------------
+//STEP010  EXEC PGM=CRDPOST
+//STEPLIB  DD DSN=PROD.CARD.LOADLIB,DISP=SHR
+//CARDIN   DD DSN=PROD.CARD.DAILY.INPUT,DISP=SHR
+//SYSOUT   DD SYSOUT=*

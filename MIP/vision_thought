@@ -1,0 +1,99 @@
+The Product Vision I See
+
+Imagine an engineer joins a bank.
+
+Today:
+
+Repository
+  50,000 files
+
+Documentation
+  outdated
+
+SMEs
+  retiring
+
+Knowledge
+  tribal
+
+Question:
+
+Where is credit limit updated?
+
+Current answer:
+
+3 weeks
+5 meetings
+2 SMEs
+
+Your platform:
+
+Question:
+Where is credit limit updated?
+
+Answer:
+
+Business Capability:
+Credit Management
+
+Jobs:
+LIMITUPD
+AUTHPOST
+
+Programs:
+CRDLIM01
+CRDLIM02
+
+Tables:
+CARD_LIMIT
+
+Rules:
+Decline when exposure exceeds limit.
+
+Call Flow:
+...
+
+That's the value.
+
+What We Should Build First
+
+Not AI chat.
+
+Not LangGraph.
+
+Not Neo4j.
+
+Not vector search.
+
+The first deliverable should be:
+
+Enterprise Metadata Layer
+
+Entities:
+
+Program
+Job
+Copybook
+Table
+File
+Transaction
+Dataset
+Business Rule
+
+Relationships:
+
+CALLS
+USES
+READS
+WRITES
+UPDATES
+EXECUTES
+CONTAINS
+
+If we get this right:
+
+everything else becomes easier.
+
+If we get this wrong:
+
+AI becomes useless.

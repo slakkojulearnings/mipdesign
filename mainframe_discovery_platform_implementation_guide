@@ -1,0 +1,511 @@
+# MAINFRAME DISCOVERY PLATFORM IMPLEMENTATION GUIDE
+
+# Objective
+
+Build a reusable Mainframe Discovery Platform capable of analyzing large enterprise mainframe repositories containing:
+
+* COBOL
+* JCL
+* Copybooks
+* DB2
+* CICS
+* Control-M/Scheduler artifacts
+
+The platform should support:
+
+* Repository discovery
+* Dependency analysis
+* Root program discovery
+* Data lineage
+* Impact analysis
+* Business rule extraction
+* Natural language Q&A
+* Future modernization
+
+---
+
+# Workspace Structure
+
+mainframe-discovery/
+
+├── mfcode/
+│
+├── discovery/
+│   ├── backend/
+│   ├── parsers/
+│   ├── graph/
+│   ├── knowledge/
+│   ├── docs/
+│   └── tests/
+│
+├── .github/
+│
+└── .skills/
+
+---
+
+# STEP 1
+
+# Create Global Copilot Instructions
+
+File:
+
+.github/copilot-instructions.md
+
+Contents:
+
+You are a Principal Mainframe Modernization Architect.
+
+Expertise:
+
+* COBOL
+* JCL
+* DB2
+* CICS
+* T-SYS
+* Enterprise Batch Systems
+* Knowledge Graphs
+* Python 3.13
+* FastAPI
+* Pydantic v2
+* Neo4j
+* NetworkX
+
+Rules:
+
+1. Architecture first.
+2. Explain design decisions.
+3. Use production-grade patterns.
+4. Design for very large repositories.
+5. Generate tests.
+6. Generate logging.
+7. Generate error handling.
+8. Prefer modular architecture.
+9. Design for future AI integration.
+10. Avoid throwaway code.
+
+Required Output Format:
+
+1. Problem Analysis
+2. Architecture
+3. Domain Models
+4. Implementation Plan
+5. Code
+6. Tests
+7. Future Improvements
+
+---
+
+# STEP 2
+
+# Create Repository Discovery Skill
+
+File:
+
+.skills/repository-discovery/skill.md
+
+Purpose:
+
+Understand repository structure.
+
+Responsibilities:
+
+* Identify COBOL
+* Identify JCL
+* Identify Copybooks
+* Identify DB2 artifacts
+* Identify CICS artifacts
+
+Output:
+
+Repository Inventory
+
+Prompt:
+
+Act as a Mainframe Discovery Engineer.
+
+Analyze repository structure.
+
+Identify:
+
+* COBOL
+* JCL
+* COPYBOOK
+* DB2
+* CICS
+
+Generate:
+
+1. Repository inventory strategy
+2. Metadata schema
+3. Extraction workflow
+4. Scalability considerations
+
+Do not generate implementation yet.
+
+---
+
+# STEP 3
+
+# Create COBOL Analysis Skill
+
+File:
+
+.skills/cobol-analysis/skill.md
+
+Purpose:
+
+Analyze COBOL metadata.
+
+Extract:
+
+* PROGRAM-ID
+* CALL
+* COPY
+* EXEC SQL
+* FILE definitions
+
+Output:
+
+Program Catalog
+
+Prompt:
+
+Act as a COBOL compiler engineer.
+
+Design a scalable COBOL parser.
+
+Extract:
+
+* PROGRAM-ID
+* CALL statements
+* COPY statements
+* EXEC SQL
+* FILE definitions
+
+Requirements:
+
+* Incremental parsing
+* Large repository support
+* Testability
+* Pydantic models
+
+Output:
+
+1. Architecture
+2. Domain Models
+3. Parsing Strategy
+4. Edge Cases
+
+Do not generate code yet.
+
+---
+
+# STEP 4
+
+# Create JCL Analysis Skill
+
+File:
+
+.skills/jcl-analysis/skill.md
+
+Purpose:
+
+Identify batch entry points.
+
+Extract:
+
+* JOB
+* PROC
+* EXEC PGM
+* DD statements
+
+Output:
+
+Job Catalog
+
+Prompt:
+
+Act as a Senior Mainframe Batch Architect.
+
+Design a JCL parser.
+
+Extract:
+
+* JOB
+* PROC
+* EXEC PGM
+* DD
+* Dataset references
+
+Create relationships:
+
+JOB → PROGRAM
+
+Output:
+
+1. Architecture
+2. Domain Models
+3. Parsing Strategy
+4. Edge Cases
+
+---
+
+# STEP 5
+
+# Create DB2 Lineage Skill
+
+File:
+
+.skills/db2-lineage/skill.md
+
+Purpose:
+
+Create data lineage.
+
+Extract:
+
+* SELECT
+* INSERT
+* UPDATE
+* DELETE
+
+Output:
+
+Program → Table relationships
+
+Prompt:
+
+Act as a DB2 lineage specialist.
+
+Design a DB2 metadata extraction service.
+
+Extract:
+
+* Operations
+* Tables
+* Columns
+
+Output:
+
+1. Metadata Model
+2. Extraction Strategy
+3. Lineage Design
+4. Scalability Approach
+
+---
+
+# STEP 6
+
+# Create Graph Builder Skill
+
+File:
+
+.skills/graph-builder/skill.md
+
+Purpose:
+
+Build dependency graph.
+
+Nodes:
+
+* Program
+* Job
+* Table
+* Copybook
+* Dataset
+
+Edges:
+
+* CALLS
+* EXECUTES
+* USES
+* READS
+* WRITES
+* UPDATES
+
+Prompt:
+
+Act as a Knowledge Graph Architect.
+
+Design a dependency graph.
+
+Support:
+
+* Impact Analysis
+* Root Discovery
+* Lineage
+* Traceability
+
+Output:
+
+1. Graph Model
+2. Node Types
+3. Edge Types
+4. Query Patterns
+
+---
+
+# STEP 7
+
+# Create Impact Analysis Skill
+
+File:
+
+.skills/impact-analysis/skill.md
+
+Purpose:
+
+Determine downstream impacts.
+
+Prompt:
+
+Act as an Enterprise Impact Analyst.
+
+Design impact analysis workflows.
+
+Questions:
+
+* What breaks if table changes?
+* What breaks if copybook changes?
+* What breaks if program changes?
+
+Generate:
+
+1. Impact Model
+2. Traversal Strategy
+3. Query Patterns
+
+---
+
+# STEP 8
+
+# Create Modernization Advisor Skill
+
+File:
+
+.skills/modernization-advisor/skill.md
+
+Purpose:
+
+Prepare future modernization.
+
+Prompt:
+
+Act as a Mainframe Modernization Architect.
+
+Using dependency graph and lineage:
+
+Generate:
+
+* Service candidates
+* Bounded contexts
+* API candidates
+* Event candidates
+* Batch decomposition opportunities
+
+Output architecture only.
+
+---
+
+# IMPLEMENTATION ORDER
+
+Phase 1
+
+Repository Discovery
+
+Deliverable:
+
+Inventory
+
+---
+
+Phase 2
+
+COBOL Analysis
+
+Deliverable:
+
+Program Catalog
+
+---
+
+Phase 3
+
+JCL Analysis
+
+Deliverable:
+
+Job Catalog
+
+---
+
+Phase 4
+
+DB2 Analysis
+
+Deliverable:
+
+Lineage Catalog
+
+---
+
+Phase 5
+
+Graph Builder
+
+Deliverable:
+
+Knowledge Graph
+
+---
+
+Phase 6
+
+Impact Analysis
+
+Deliverable:
+
+Dependency Explorer
+
+---
+
+Phase 7
+
+Natural Language Q&A
+
+Deliverable:
+
+Mainframe Discovery Assistant
+
+Questions:
+
+* Which jobs execute program X?
+* Which programs call program X?
+* Which tables are updated by program X?
+* Show root program.
+* Trace transaction flow.
+
+---
+
+# COPILOT USAGE RULE
+
+Always use this sequence:
+
+1. Ask for Architecture
+2. Ask for Review
+3. Ask for Improvements
+4. Ask for Implementation
+5. Ask for Tests
+6. Ask for Code Review
+7. Ask for Refactoring
+
+Never start with:
+
+"Write the code"
+
+Always start with:
+
+"Design the architecture"
+
+This single habit will dramatically improve Copilot output quality.

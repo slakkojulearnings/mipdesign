@@ -1,0 +1,25 @@
+Build JCL parser.
+
+Prompt:
+
+Act as a senior mainframe architect.
+
+Design a JCL parser.
+
+Extract:
+
+- JOB
+- EXEC PGM
+- PROC
+- DD
+- Dataset references
+
+Create relationships:
+
+JOB -> PROGRAM
+
+Output:
+1. Architecture
+2. Models
+3. Parsing strategy
+4. Edge cases

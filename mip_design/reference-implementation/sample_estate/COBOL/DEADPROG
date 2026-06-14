@@ -1,0 +1,14 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. DEADPROG.
+      *----------------------------------------------------------------
+      * Orphan program: no job executes it and nothing calls it.
+      * MIP dead-code detection should surface it as a retirement
+      * candidate (needs_review: could be invoked dynamically/externally).
+      *----------------------------------------------------------------
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       COPY CARDREC.
+       PROCEDURE DIVISION.
+       0000-MAIN.
+           DISPLAY 'UNUSED'.
+           GOBACK.

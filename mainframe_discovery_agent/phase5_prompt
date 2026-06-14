@@ -1,0 +1,29 @@
+Build dependency graph.
+
+Prompt:
+
+Design a dependency graph service.
+
+Nodes:
+
+- Program
+- Copybook
+- Table
+- Job
+- Dataset
+
+Edges:
+
+- CALLS
+- USES
+- UPDATES
+- READS
+- EXECUTES
+
+Support:
+
+- impact analysis
+- lineage
+- root program discovery
+
+Output architecture only.

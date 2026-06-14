@@ -1,0 +1,18 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# MIP runtime artifacts
+*.db
+mip_design/app/question_log.md
+mip_design/app/question_log.jsonl
+
+# Node / frontend build
+node_modules/
+dist/
+
+# Claude Code local (personal) settings — do NOT ship; settings.json IS shipped
+.claude/settings.local.json

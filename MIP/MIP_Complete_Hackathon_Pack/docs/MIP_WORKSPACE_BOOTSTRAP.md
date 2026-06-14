@@ -1,0 +1,1 @@
+Workspace bootstrap checklist.

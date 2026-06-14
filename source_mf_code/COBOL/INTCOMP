@@ -1,0 +1,12 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. INTCOMP.
+      *----------------------------------------------------------------
+      * Interest computation. Called by INTDRV.
+      *----------------------------------------------------------------
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       COPY ACCTREC.
+       PROCEDURE DIVISION USING ACCT-RECORD.
+       0000-MAIN.
+           COMPUTE ACCT-BALANCE = ACCT-BALANCE * 1.015.
+           GOBACK.

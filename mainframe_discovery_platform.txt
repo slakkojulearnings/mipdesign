@@ -1,0 +1,208 @@
+Thiknk about the entire 15000+ cobol program ecosystem, I'd approach this as building a Mainframe Discovery Platform.
+
+Your goal is : 
+    "I should be able to ask natural language questions about the mainframe system and get answers from the codebase."  
+
+Examples:
+
+Which jobs update card balances?
+Show payment posting flow.
+Which programs use table XYZ?
+What copybooks impact authorization?
+Generate a sequence diagram for statement generation.
+Explain this COBOL module in plain English.
+
+Phase 1 : Create a foundation
+
+Step 1: Organize the repository
+
+mainframe-discovery/
+│
+├── sourcedata/
+│   ├── jcl/
+│   ├── cobol/
+│   ├── copybooks/
+│   ├── db2/
+│   └── cics/
+│
+├── parsers/
+├── graph/
+├── knowledge/
+├── api/
+├── ui/
+└── tests/
+
+Copilot prompt : 
+Create a production-ready Python project structure for a mainframe discovery platform that will analyze COBOL, JCL, Copybooks, DB2 DDL, and CICS definitions etc or entire mainframe codebase.
+Use uv, FastAPI, Pydantic v2, pytest, and modular architecture. ( wiwth latest libraries)
+
+
+Phase 2 : Build Inventory first ( remember - dont parse deeply yet)
+
+Step 2 : File inventory Service
+Extract :
+    File Name
+    Type
+    Location
+    Size
+    Modified Date
+
+Output :
+
+{
+  "file": "PAYPOST.cbl",
+  "type": "COBOL"
+}
+
+Copilot Prompt : Create a Python service that recursively scans a repository and classifies files as COBOL, JCL, Copybook, DB2 DDL, CICS definitions, or unknown or entire codebase
+
+Goal : 15000+ programs ( Given exact number)
+→ Inventory Database
+
+Phase 3 : COBOL parsers
+
+Step 3 : Parse PROGRAM-ID
+
+Extract : 
+    PROGRAM-ID. PAYPOST.
+
+Store: 
+
+    {
+  "program": "PAYPOST"
+}
+
+
+Copilot prompt : 
+Create a robust COBOL parser that extracts PROGRAM-ID, AUTHOR, CALL statements, COPY statements, and EXEC SQL blocks.
+Return structured Pydantic models. ( If you identify more information, extract it).
+
+Remember : Ask one extractor at a time.
+
+Phase 4: Build CALL Relationships
+
+Extract :
+
+    CALL 'PAYUPD'
+    CALL 'PAYFEE'
+
+Create :
+
+    PAYPOST
+    ↓
+    PAYUPD
+    PAYFEE
+
+Store:
+
+    {
+    "caller": "PAYPOST",
+    "callee": "PAYUPD"
+    }
+Copilot Prompt
+Generate code that builds a directed graph of COBOL CALL relationships using NetworkX.
+
+Phase 5: Parse Copybooks
+
+Extract:
+
+    COPY CARDREC.
+    COPY CUSTREC.
+
+Build:
+
+    PAYPOST
+    ↓
+    CARDREC
+
+This becomes important later for impact analysis.
+
+Phase 6: Parse DB2
+
+Extract:
+
+    SELECT
+    INSERT
+    UPDATE
+    DELETE
+
+And tables:
+
+</> SQL
+    UPDATE CARD_ACCOUNT
+
+Store:
+</> JSON
+    {
+    "program": "PAYUPD",
+    "table": "CARD_ACCOUNT",
+    "operation": "UPDATE"
+    }
+
+Copilot Prompt
+Create a parser that extracts SQL operations and referenced DB2 tables from EXEC SQL blocks in COBOL.
+
+Phase 7: Parse JCL
+
+This is where roots come from.
+
+Extract:
+</> jcl
+
+EXEC PGM=PAYPOST
+
+Store:
+</JSON>
+{
+  "job": "PAYMENTJOB",
+  "program": "PAYPOST"
+}
+
+Copilot Prompt : Create a JCL parser that extracts JOB names, PROC names, EXEC PGM values, DD statements, datasets, and step dependencies.
+
+Phase 8: Build the Knowledge Graph
+
+This is the most important part.
+
+Nodes:
+
+    Program
+    Table
+    Copybook
+    Job
+    Dataset
+    Transaction
+
+Edges:
+
+    CALLS
+    UPDATES
+    READS
+    USES
+    EXECUTES
+
+Graph:
+
+    PAYMENTJOB
+    ↓ executes
+    PAYPOST
+    ↓ calls
+    PAYUPD
+    ↓ updates
+    CARD_ACCOUNT
+
+Use:
+</> Python 
+networkx
+
+Phase 9: Add AI Layer
+
+Now bring in LLMs.
+
+    COBOL
+    ↓
+    Graph
+    ↓
+    LLM
+
+The graph becomes the context.

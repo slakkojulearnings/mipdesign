@@ -1,0 +1,20 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PAYUPD.
+      *----------------------------------------------------------------
+      * Payment update. Called by PAYDRV. Writes PAYMENT and ACCT_MASTER.
+      *----------------------------------------------------------------
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       COPY PAYREC.
+       PROCEDURE DIVISION.
+       0000-MAIN.
+           EXEC SQL
+              INSERT INTO PAYMENT (CARD_NUMBER, PAY_AMOUNT)
+              VALUES (:PAY-CARD-NUMBER, :PAY-AMOUNT)
+           END-EXEC.
+           EXEC SQL
+              UPDATE ACCT_MASTER
+                 SET BALANCE = BALANCE - :PAY-AMOUNT
+               WHERE CARD_NUMBER = :PAY-CARD-NUMBER
+           END-EXEC.
+           GOBACK.

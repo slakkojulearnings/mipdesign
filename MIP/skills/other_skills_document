@@ -1,0 +1,230 @@
+skills/
+
+├── repository-engineer/
+├── mainframe-modernization-architect/
+├── mainframe-code-analyst/
+├── metadata-modeler/
+├── graph-engineer/
+├── sqlite-engineer/
+├── test-engineer/
+├── code-reviewer/
+└── documentation-writer/
+1. repository-engineer
+
+This is missing and should be created first.
+
+Purpose:
+
+Create folder structure
+Create package structure
+Create configuration files
+Create workspace setup
+Create CI/CD setup
+
+Input:
+
+Project requirements
+Technology stack
+Architecture principles
+
+Output:
+
+Folder structure
+Python packages
+pyproject.toml
+.gitignore
+README
+CI/CD skeleton
+
+Questions it answers:
+
+Where should this code go?
+
+Should this be a service?
+
+Should this be a package?
+
+What is the correct repository structure?
+2. mainframe-modernization-architect
+
+Already created.
+
+Purpose:
+
+Platform architecture
+Modernization strategy
+Domain modeling
+Roadmap
+3. mainframe-code-analyst
+
+Already created.
+
+Purpose:
+
+COBOL
+JCL
+DB2
+Copybooks
+Dependencies
+4. metadata-modeler
+
+Very important.
+
+Purpose:
+
+Design metadata entities.
+
+Input:
+
+Source artifacts
+Relationships
+
+Output:
+
+Program
+Job
+Copybook
+Table
+Relationship
+
+Questions:
+
+What metadata should exist?
+
+What attributes should be captured?
+
+How should entities evolve?
+5. graph-engineer
+
+Purpose:
+
+Design NetworkX graph.
+
+Input:
+
+Metadata entities
+Relationships
+
+Output:
+
+Nodes
+Edges
+Traversal strategies
+Graph queries
+
+Questions:
+
+Should this be a node?
+
+Should this be an edge?
+
+How should relationships be represented?
+6. sqlite-engineer
+
+Purpose:
+
+Design SQLite schema.
+
+Input:
+
+Metadata entities
+Graph requirements
+
+Output:
+
+CREATE TABLE ...
+
+Questions:
+
+What tables should exist?
+
+What indexes are needed?
+
+How do we avoid duplicates?
+7. test-engineer
+
+Purpose:
+
+Create tests.
+
+Input:
+
+Implementation
+Requirements
+
+Output:
+
+Unit tests
+Integration tests
+
+Rule:
+
+Never allow parser code without tests.
+
+8. code-reviewer
+
+Purpose:
+
+Critique everything.
+
+Input:
+
+Implementation
+Architecture
+
+Output:
+
+Risks
+Bugs
+Improvements
+
+Use before every commit.
+
+9. documentation-writer
+
+Purpose:
+
+Generate:
+
+README
+Architecture docs
+API docs
+Examples
+Inputs / Outputs
+
+Yes, every skill should explicitly define them.
+
+A skill should always contain:
+
+# Purpose
+
+# Inputs
+
+# Outputs
+
+# Responsibilities
+
+# Constraints
+
+# Success Criteria
+
+# Examples
+
+# Review Checklist
+Example Skill Structure
+skills/
+
+repository-engineer/
+
+├── skill.md
+├── examples/
+│   ├── create_repo_structure.md
+│   ├── create_fastapi_service.md
+│   └── create_python_package.md
+│
+├── templates/
+│   ├── repo_structure.txt
+│   └── pyproject_template.toml
+│
+└── prompts/
+    └── repository_prompts.md

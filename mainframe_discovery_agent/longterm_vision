@@ -1,0 +1,59 @@
+Long-Term Vision
+
+Eventually you want:
+
+User:
+How is a payment posted?
+
+Agent:
+JOB: PAYMENTJOB
+
+Driver:
+PAYDRV01
+
+Flow:
+PAYDRV01
+  -> PAYVAL01
+  -> PAYUPD01
+  -> STMTUPD01
+
+Tables:
+PAYMENT
+CARD_ACCOUNT
+STATEMENT
+
+Business Rules:
+...
+
+
+or
+
+User:
+Which programs update CARD_ACCOUNT?
+
+Agent:
+Found 17 programs.
+
+Top jobs:
+...
+
+That's when the platform becomes useful to analysts, developers, testers, architects, and modernization teams.
+
+My recommendation
+Create the VS Code workspace.
+Add mfcode/.
+Create a strong Copilot instruction file.
+Build the platform in this order:
+Inventory
+  ↓
+COBOL Parser
+  ↓
+JCL Parser
+  ↓
+DB2 Parser
+  ↓
+Graph Builder
+  ↓
+Q&A Layer
+
+Don't start with AI chat. Start with the graph. The graph becomes the truth source that the AI layer can reason over repeatedly and reliably.

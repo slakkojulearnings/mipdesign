@@ -1,0 +1,264 @@
+MIP v0.1
+Objective
+
+Given a folder containing:
+
+mfcode/
+
+├── cobol/
+├── jcl/
+├── copybooks/
+└── db2/
+
+Answer:
+
+What programs exist?
+
+What jobs exist?
+
+What copybooks exist?
+
+Which program calls which?
+
+Which job executes which program?
+
+Nothing else.
+
+Step 1 — Create Workspace
+mip-platform/
+
+├── mfcode/
+├── src/
+├── tests/
+├── docs/
+├── output/
+├── .skills/
+└── prompts/
+Step 2 — Create First Skill
+
+Create:
+
+.skills/
+    repository-discovery/
+        skill.md
+
+Contents:
+
+# Repository Discovery Skill
+
+Purpose:
+Discover all artifacts in a source repository.
+
+Inputs:
+Repository path
+
+Outputs:
+Artifact inventory
+
+Responsibilities:
+- Scan recursively
+- Detect file types
+- Build inventory
+- Generate statistics
+
+Success Criteria:
+Every source artifact is cataloged.
+Step 3 — Build Repository Scanner
+
+Don't parse COBOL yet.
+
+Just inventory.
+
+Output:
+
+{
+  "path":"cobol/PAY001.cbl",
+  "type":"cobol"
+}
+Copilot Prompt
+
+Paste this in Copilot Chat:
+
+Act as a Principal Python Architect.
+
+Design a scalable repository discovery service.
+
+Requirements:
+
+- Python 3.13
+- Pydantic v2
+- Recursive scanning
+- Support millions of files
+- Extensible file classification
+- Production-grade architecture
+
+Do not write code.
+
+Produce architecture only.
+
+Review its answer.
+
+Step 4 — Ask Copilot To Critique Itself
+
+Prompt:
+
+Review the proposed repository discovery architecture.
+
+Identify:
+
+- Scalability risks
+- Design flaws
+- Testing gaps
+- Performance concerns
+
+Recommend improvements.
+
+This step alone will improve quality significantly.
+
+Step 5 — Generate Code
+
+Prompt:
+
+Generate production-grade implementation.
+
+Requirements:
+
+- Domain models
+- Services
+- Error handling
+- Structured logging
+- Unit tests
+- Type hints
+
+Follow SOLID principles.
+Step 6 — Validate Against Real Code
+
+Run against your TSys source.
+
+Questions:
+
+How many COBOL programs?
+
+How many JCLs?
+
+How many copybooks?
+
+How many unknown files?
+
+If inventory is wrong, fix it before moving forward.
+
+Step 7 — Build Program Catalog
+
+For COBOL only.
+
+Extract:
+
+PROGRAM-ID
+
+Example:
+
+PROGRAM-ID. PAY001.
+
+Store:
+
+{
+  "program":"PAY001",
+  "path":"..."
+}
+Copilot Prompt
+Act as a Mainframe Modernization Expert.
+
+Analyze COBOL source files.
+
+Design a metadata extraction framework that extracts:
+
+- PROGRAM-ID
+
+Only.
+
+Ignore CALLs.
+Ignore COPYs.
+Ignore SQL.
+
+Return architecture only.
+
+Notice the phrase Only.
+
+That keeps scope under control.
+
+Step 8 — Build JCL Catalog
+
+Extract:
+
+//PAYJOB JOB
+
+and
+
+EXEC PGM=
+
+Store:
+
+{
+  "job":"PAYJOB",
+  "program":"PAY001"
+}
+Step 9 — First Useful Query
+
+You don't need Neo4j yet.
+
+Use PostgreSQL.
+
+Question:
+
+SELECT *
+FROM program_catalog
+WHERE program_name='PAY001';
+
+Then:
+
+SELECT *
+FROM job_program_relationship;
+
+If you can answer:
+
+Which jobs execute PAY001?
+
+You've created the first real business value.
+
+What to Ask Copilot Every Time
+
+Don't ask:
+
+Write code.
+
+Ask:
+
+1. Design
+2. Review
+3. Critique
+4. Improve
+5. Implement
+6. Test
+7. Refactor
+
+That sequence produces dramatically better results.
+
+Your First Deliverable
+
+After v0.1, you should be able to point MIP at a TSys repository and produce:
+
+Programs Found: 12,842
+
+Jobs Found: 2,315
+
+Copybooks Found: 8,924
+
+Relationships Found: 17,521
+
+And answer:
+
+Which jobs execute program X?
+
+That may sound simple, but it's the first step from "source code" to "enterprise knowledge."
+
+Once you reach that point, the next phase is CALL relationship discovery (Program → CALLS → Program), which is where the knowledge graph starts becoming powerful.

@@ -1,0 +1,12 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STMTFMT.
+      *----------------------------------------------------------------
+      * Statement formatter. Called by STMTDRV.
+      *----------------------------------------------------------------
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       COPY CARDREC.
+       PROCEDURE DIVISION USING CARD-RECORD.
+       0000-MAIN.
+           DISPLAY 'STATEMENT FOR ' CARD-NUMBER.
+           GOBACK.

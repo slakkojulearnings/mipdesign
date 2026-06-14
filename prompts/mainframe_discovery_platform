@@ -1,0 +1,89 @@
+You are a principal engineer building a production-grade mainframe discovery platform.
+
+Requirements:
+- Python 3.13
+- FastAPI
+- Pydantic v2
+- SOLID principles
+- Type hints
+- Unit tests
+- Structured logging
+- Repository pattern
+
+Task:
+Implement a COBOL CALL statement extractor.
+
+Output:
+1. Domain model
+2. Parser implementation
+3. Unit tests
+4. Example usage
+
+
+Best Copilot Workflow
+*********************
+For every feature:
+
+First
+
+Ask:
+
+Design the architecture.
+Second
+
+Ask:
+
+Review the architecture.
+Identify flaws.
+Third
+
+Ask:
+
+Implement.
+Fourth
+
+Ask:
+
+Generate tests.
+Fifth
+
+Ask:
+
+Perform a code review.
+
+Treat Copilot as:
+
+Junior Engineer
+Senior Engineer
+Architect
+QA Engineer
+
+by changing the prompt.
+
+Your First Deliverable----
+
+Don't build the chatbot first.
+
+Build:
+
+Repository
+ ↓
+Inventory
+ ↓
+COBOL Parser
+ ↓
+JCL Parser
+ ↓
+DB2 Parser
+ ↓
+Graph Builder
+
+When you can answer:
+
+Which jobs execute program X?
+Which programs call program X?
+Which tables does program X update?
+
+you already have a valuable modernization platform.
+
+After that, adding AI chat, impact analysis, Java conversion, business-rule extraction, and sequence-diagram generation becomes much easier because they're all built on the same knowledge graph.

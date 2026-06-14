@@ -1,0 +1,17 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. INTDRV.
+      *----------------------------------------------------------------
+      * Interest calculation driver. Root executed by INTCALC.
+      * Demonstrates a DYNAMIC call (rate program chosen at runtime):
+      * MIP must keep this edge but flag it needs_review / low confidence.
+      *----------------------------------------------------------------
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       COPY ACCTREC.
+       01 WS-RATE-PGM         PIC X(8).
+       PROCEDURE DIVISION.
+       0000-MAIN.
+           CALL 'INTCOMP' USING ACCT-RECORD.
+           MOVE 'INTRATE1' TO WS-RATE-PGM.
+           CALL WS-RATE-PGM USING ACCT-RECORD.
+           GOBACK.

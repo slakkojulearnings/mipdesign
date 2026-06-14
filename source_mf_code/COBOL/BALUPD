@@ -1,0 +1,16 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. BALUPD.
+      *----------------------------------------------------------------
+      * Balance update. Called by CRDPOST. Writes CARD_MASTER (DB2).
+      *----------------------------------------------------------------
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       COPY ACCTREC.
+       PROCEDURE DIVISION.
+       0000-MAIN.
+           EXEC SQL
+              UPDATE CARD_MASTER
+                 SET CURRENT_BALANCE = :ACCT-BALANCE
+               WHERE CARD_NUMBER = :ACCT-CARD-NUMBER
+           END-EXEC.
+           GOBACK.

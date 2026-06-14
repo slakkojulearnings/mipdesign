@@ -1,0 +1,12 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PAYDRV.
+      *----------------------------------------------------------------
+      * Payment processing driver. Root executed by PAYPROC.
+      *----------------------------------------------------------------
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       COPY PAYREC.
+       PROCEDURE DIVISION.
+       0000-MAIN.
+           CALL 'PAYUPD' USING PAY-RECORD.
+           GOBACK.

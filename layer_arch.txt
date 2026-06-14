@@ -1,0 +1,311 @@
+Phase 1: Build the City Map
+
+- What is a Mainframe Application? Think of maniframe system as a city 
+
+City
+ ├── Credit Card Posting
+ ├── Statement Generation
+ ├── Payment Processing
+ ├── Collections
+ ├── Rewards
+ ├── Fraud
+ └── Customer Service
+
+Each area contains:
+
+JCL
+Programs
+Files
+DB2 tables
+Copybooks
+
+- First task to collect the inventory everything
+
+All JCLs
+All COBOLs
+All Copybooks
+All DB2 Objects
+All CICS Programs
+
+- Create inventory tables
+ex: 
+| Artifact   | Count |
+| ---------- | ----- |
+| JCL        | 1200  |
+| COBOL      | 9000  |
+| Copybook   | 3000  |
+| DB2 Tables | 800   |
+
+Note : Do not read code
+
+Phase 2: Understand Mainframe Building Blocks
+
+1. JCL 
+My thoughts are :
+- JCL means : 
+    Windows .bat file 
+    Linux shell script
+- JCL answers:
+    What runs?
+    When?
+    With what files?
+
+ex: //STEP01 EXEC PGM=ABC100 
+meaning : Run program ABC100
+
+2. COBOL
+
+My thoughts are : Business rules
+
+ex: 
+IF BALANCE > LIMIT
+    MOVE 'Y' TO DECLINE
+END-IF
+
+Translation: Decline transaction if balance exceeds limit.
+
+3. Copybooks
+ 
+My thoughts are : 
+    Header files
+    Shared data structures
+ex: 
+COPY CARDREC.
+
+Contains :
+    Card Number
+    Customer Number
+    Balance
+    Status
+
+4. DB2
+
+My thoughts : SQL database
+
+Stores:
+    Card Number
+    Customer Number
+    Balance
+    Status
+
+5. CICS
+
+My thoughts - Web application server
+
+before web apps existed :
+    Customer Service Screen
+    Authorization Screen
+    Maintenance Screen
+
+Phase 3: Find Entry Points - They open random COBOL programs.
+
+- Find all JCL Drivers. Search : EXEC PGM=
+
+Create :
+| Job           | Driver |
+| ------------- | ------ |
+| Daily Posting | PGM1   |
+| Statement     | PGM2   |
+| Rewards       | PGM3   |
+
+Now, you get to know where batch starts.
+
+- Find all CICS Transations - Search transaction definitions.
+
+Create:
+
+| Transaction | Program |
+| ----------- | ------- |
+| AUTH        | AUTH001 |
+| CUST        | CUST001 |
+
+
+Now, you will know where online starts
+
+Phase 4: Build Program call graph
+
+Imagine :
+    CALL 'B'
+    CALL 'C'
+
+Graph:
+    A
+    ├─ B
+    └─ C
+
+Make sure to do this for all cobol programs
+
+Result : Program Network
+
+Now you can answer :
+
+    Who calls this?
+    What does it call?
+
+Phase 5: Build Dtaa Lineage
+
+Search : EXEC SQL
+Extract :
+
+    SELECT
+    INSERT
+    UPDATE
+    DELETE
+
+Create :
+
+| Program | Table       |
+| ------- | ----------- |
+| PGM1    | CARD_MASTER |
+| PGM2    | ACCOUNT     |
+| PGM3    | PAYMENT     |
+
+
+Nnow you know : Whihc program updates which tables
+
+Phase 6: Understand Business domains
+
+Dont start from code, start from business domains :
+
+    Authorization
+    Posting
+    Payments
+    Statements
+    Collections
+    Rewards
+    Customer Service
+    Fraud
+
+Build :
+
+    Business Function
+        ↓
+    Jobs
+        ↓
+    Programs
+        ↓
+    Tables
+
+Example :
+
+    Payments
+    ↓
+    PAYMENTJOB
+    ↓
+    PAYDRV01
+    ↓
+    PAYUPD01
+    ↓
+    PAYMENT_TABLE
+
+
+Phase 7: Create a knowledge Graph -> This is where AI becomes useful
+
+Nodes :
+
+    Programs
+    JCL
+    Tables
+    Copybooks
+    Transactions
+
+Edges :
+
+    CALLS
+    UPDATES
+    READS
+    EXECUTES
+    USES
+
+Example :
+
+    POSTJOB
+    EXECUTES
+        ↓
+    POSTDRV
+
+    POSTDRV
+    CALLS
+        ↓
+    BALUPD
+
+    BALUPD
+    UPDATES
+        ↓
+    CARD_ACCOUNT
+
+Now you can ask : Which obs update card balalce ? 
+
+and get an answer
+
+Phase 8 : Only then Read COBOL
+
+At this stage, you know :
+
+    Root Job
+    Driver
+    Call Chain
+    Tables
+    Business Area
+
+Now reading code becomes meaningful. 
+
+without context - 
+
+    MOVE WS-AMT TO CURR-AMT
+
+With context -
+
+    Payment Posting Job
+    Balance Update Module
+    CARD_ACCOUNT Table
+
+Finally you will understand it.
+
+Phase 9 : AI Modernization Skill
+
+Build agents:
+
+Agent 1
+
+Find root program.
+
+Agent 2
+
+Trace transaction.
+
+Agent 3
+
+Explain business rule.
+
+Agent 4
+
+Generate sequence diagram.
+
+Agent 5
+
+Generate Java equivalent.
+
+Agent 6
+
+Impact analysis.
+
+Example question:
+What happens when payment is received?
+
+Agent walks : 
+
+
+    JCL
+    ↓
+    Driver
+    ↓
+    Payment Module
+    ↓
+    DB2 Update
+    ↓
+    Statement Update
+
+and explains it in English
+
+

@@ -1,0 +1,7 @@
+//INTCALC  JOB (ACCT),'INTEREST CALC',CLASS=A,MSGCLASS=X
+//*--------------------------------------------------------------
+//* Interest calculation. Entry point -> INTDRV.
+//*--------------------------------------------------------------
+//STEP010  EXEC PGM=INTDRV
+//STEPLIB  DD DSN=PROD.CARD.LOADLIB,DISP=SHR
+//SYSOUT   DD SYSOUT=*

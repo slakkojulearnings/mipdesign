@@ -1,0 +1,34 @@
+Create a workspace-wide prompt library:
+
+prompts/
+
+├── architecture/
+├── discovery/
+├── parsing/
+├── metadata/
+├── graph/
+├── testing/
+├── review/
+└── modernization/
+
+Examples:
+
+prompts/discovery/repository_scan.md
+prompts/parsing/cobol_parser.md
+prompts/graph/build_call_graph.md
+prompts/testing/parser_tests.md
+
+This lets any team member ask Copilot consistent questions and get consistent results.
+
+I would create only these first:
+
+skills/
+
+1. repository-engineer
+2. mainframe-modernization-architect
+3. mainframe-code-analyst
+4. metadata-modeler
+5. graph-engineer
+6. code-reviewer
+
+These six skills are enough to build Phases 0–4 and will keep Copilot focused on producing a consistent, enterprise-grade MIP foundation.

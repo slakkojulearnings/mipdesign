@@ -1,0 +1,51 @@
+I recommend we build this repository incrementally:
+
+Wave 1 (Leadership Pack)
+
+Executive Summary
+Vision
+Manifesto
+Business Case
+Target Architecture
+Domain Model
+Roadmap
+
+Wave 2 (Engineering Pack)
+
+Engineering Playbook
+Skills
+Prompts
+Workspace Bootstrap
+Standards
+
+Wave 3 (Implementation Pack)
+
+SQLite Schema
+NetworkX Design
+ADK Design
+TSys Discovery Playbook
+Phase 0–4 detailed implementation
+
+Wave 4 (Demo Pack)
+
+Pitch deck
+Demo storyline
+Sample TSys walkthrough
+ROI model
+Modernization assessment
+
+
+Priority Order
+
+Don't build everything at once.
+
+Build in this order:
+
+1. MIP_WORKSPACE_BOOTSTRAP.md
+2. MIP_REPOSITORY_STRUCTURE.md
+3. MIP_GITHUB_COPILOT_STRATEGY.md
+4. Skills
+5. Prompt Library
+6. Coding Standards
+7. Testing Strategy
+8. Engineering Playbook

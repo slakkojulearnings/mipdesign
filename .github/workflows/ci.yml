@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  backend:
+    name: Engine + tests (Python 3.13)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mip_design/reference-implementation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv venv --python 3.13
+      - run: uv pip install -e ".[dev,api]"
+      - name: Unit + ground-truth tests
+        run: uv run pytest -q
+      - name: Scan the sample estate (smoke)
+        run: uv run mip scan ../../source_mf_code
+
+  skills:
+    name: Skills catalog in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python mip_design/03-skills/validate_catalog.py
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mip_design/app/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      - run: npm run build

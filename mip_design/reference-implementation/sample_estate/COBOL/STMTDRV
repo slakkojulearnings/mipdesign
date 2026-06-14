@@ -1,0 +1,19 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STMTDRV.
+      *----------------------------------------------------------------
+      * Statement generation driver. Root executed by STMTGEN.
+      * Reads CARD_MASTER (DB2), calls STMTFMT.
+      *----------------------------------------------------------------
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       COPY CARDREC.
+       PROCEDURE DIVISION.
+       0000-MAIN.
+           EXEC SQL
+              SELECT CARD_NUMBER, CURRENT_BALANCE
+                INTO :CARD-NUMBER, :CARD-BALANCE
+                FROM CARD_MASTER
+               WHERE CARD_STATUS = 'A'
+           END-EXEC.
+           CALL 'STMTFMT' USING CARD-RECORD.
+           GOBACK.

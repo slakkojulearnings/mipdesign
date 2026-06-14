@@ -1,0 +1,47 @@
+Goal:
+
+Inventory.
+
+Do NOT parse yet.
+
+
+
+Prompt:
+
+Act as a principal modernization architect.
+
+We are building a Mainframe Discovery Platform.
+
+Repository structure:
+
+mfcode/
+  contains COBOL
+  JCL
+  Copybooks
+  DB2 DDL
+  CICS definitions
+  others codebase folders
+
+Task:
+
+Design a scalable inventory service.
+
+Requirements:
+
+- Handle 300,000+ files
+- Python 3.13
+- FastAPI
+- Pydantic v2
+- SOLID principles
+- Async where appropriate
+- Structured logging
+
+Output:
+
+1. Folder structure
+2. Domain models
+3. Service design
+4. Data flow
+5. Unit testing strategy
+
+Do not generate code yet.

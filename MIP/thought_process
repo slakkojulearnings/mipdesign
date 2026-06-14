@@ -1,0 +1,43 @@
+mainframe modernization,  knowledge graphs, agentic systems, LangGraph, impact analysis, COBOL-to-Java, business rule extraction—this doesn't look like casual exploration.
+
+The larger opportunity is:
+
+Enterprise Source Code
+      ↓
+Discovery Layer
+      ↓
+Knowledge Graph
+      ↓
+Reasoning Layer
+      ↓
+Modernization Layer
+      ↓
+Enterprise Intelligence Platform
+
+That is a fundamentally different product.
+
+What I would challenge you to do
+
+Do not optimize for:
+
+"Can I parse COBOL?"
+
+Optimize for:
+
+"Can a new engineer become productive in 2 days instead of 6 months?"
+
+That changes everything.
+
+Because the real customer is not COBOL.
+
+The real customer is:
+
+Application Support
+Production Support
+Architects
+Developers
+Testers
+Modernization Teams
+Audit Teams
+New Joiners
+Business Analysts

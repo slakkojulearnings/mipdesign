@@ -1,0 +1,87 @@
+{
+  "$schema": "https://agentskills.io/specification",
+  "catalog": "MIP Skills Catalog",
+  "version": "2.0",
+  "standard": "Agent Skills (agentskills.io) — folder + SKILL.md with name/description frontmatter",
+  "principles": "00-foundation/ENGINEERING_PRINCIPLES.md",
+  "maintenance": "Source of truth for MIP skills. Update this file on every skill add/delete/rename, then run `python validate_catalog.py`. status = implemented (v0.1 code backs it) | partial | specified (designed, not yet coded).",
+  "connection_model": "prompts (what to do, in 04-prompts) -> skills (who/how, here) -> tools (code that executes, in reference-implementation + 02-algorithms).",
+  "skills": [
+    {
+      "name": "mainframe-code-analyst", "category": "discovery", "status": "implemented",
+      "prompts": ["discovery/repository_scan.md", "discovery/program_inventory.md", "discovery/jcl_inventory.md", "discovery/copybook_inventory.md", "discovery/db2_dependency_discovery.md", "discovery/root_program_discovery.md", "parsing/cobol_parser.md", "parsing/jcl_parser.md", "parsing/copybook_parser.md", "parsing/db2_sql_parser.md", "parsing/vsam_parser.md"],
+      "tools": ["reference-implementation/src/mip/scanner.py", "reference-implementation/src/mip/cobol.py", "reference-implementation/src/mip/jcl.py"],
+      "api": ["GET /api/programs", "GET /api/program/{id}", "GET /api/jobs", "GET /api/source"]
+    },
+    {
+      "name": "metadata-modeler", "category": "metadata", "status": "implemented",
+      "prompts": ["metadata/program_entity.md", "metadata/job_entity.md", "metadata/dataset_entity.md", "metadata/db2_entity.md", "metadata/relationship_model.md"],
+      "tools": ["01-metadata-model/models.py", "reference-implementation/src/mip/records.py"],
+      "api": []
+    },
+    {
+      "name": "sqlite-engineer", "category": "platform", "status": "implemented",
+      "prompts": ["metadata/relationship_model.md"],
+      "tools": ["01-metadata-model/schema.sql", "reference-implementation/src/mip/store.py"],
+      "api": []
+    },
+    {
+      "name": "graph-engineer", "category": "intelligence", "status": "partial",
+      "prompts": ["graph/build_call_graph.md", "graph/build_batch_graph.md", "graph/build_data_lineage_graph.md", "graph/impact_analysis.md", "graph/root_program_detection.md", "graph/critical_asset_discovery.md", "graph/dead_code_detection.md"],
+      "tools": ["reference-implementation/src/mip/queries.py", "02-algorithms/CORE_ALGORITHMS.md"],
+      "api": ["GET /api/graph", "GET /api/insights", "GET /api/roots", "GET /api/deadcode"],
+      "note": "v0.1 implements call/batch graph, roots, dead-code, insights via SQL; NetworkX graph algorithms (blast radius, Louvain) are specified in CORE_ALGORITHMS.md."
+    },
+    {
+      "name": "business-capability-analyst", "category": "intelligence", "status": "partial",
+      "prompts": ["discovery/business_capability_discovery.md", "graph/business_capability_detection.md", "graph/application_boundary_detection.md"],
+      "tools": ["reference-implementation/src/mip/queries.py#capabilities"],
+      "api": ["GET /api/capabilities"],
+      "note": "v0.1 derives capabilities from root call-closure + naming (inferred, confidence-scored). Semantic/Louvain clustering is the next step."
+    },
+    {
+      "name": "resilience-engineer", "category": "intelligence", "status": "partial",
+      "prompts": ["discovery/resilience_discovery.md", "graph/build_batch_graph.md", "graph/critical_asset_discovery.md"],
+      "tools": ["reference-implementation/src/mip/queries.py#dead_code", "02-algorithms/CORE_ALGORITHMS.md#4"],
+      "api": ["GET /api/deadcode", "GET /api/insights"],
+      "note": "v0.1 surfaces dead-code/dynamic-edge risk; SPOF + resilience score are specified."
+    },
+    {
+      "name": "security-compliance-analyst", "category": "intelligence", "status": "specified",
+      "prompts": ["discovery/copybook_inventory.md", "discovery/db2_dependency_discovery.md", "graph/build_data_lineage_graph.md", "metadata/dataset_entity.md"],
+      "tools": [],
+      "api": [],
+      "note": "Designed; PII/lineage classification not yet in v0.1 code."
+    },
+    {
+      "name": "mainframe-modernization-architect", "category": "modernization", "status": "specified",
+      "prompts": ["04-prompts/community/COMMON_MODERNIZATION_PROMPTS.md"],
+      "tools": [],
+      "api": [],
+      "note": "Copilot/Modernization layer; consumes the graph once built."
+    },
+    {
+      "name": "test-engineer", "category": "platform", "status": "implemented",
+      "prompts": [],
+      "tools": ["reference-implementation/tests/test_groundtruth.py"],
+      "api": []
+    },
+    {
+      "name": "code-reviewer", "category": "platform", "status": "specified",
+      "prompts": ["04-prompts/community/COMMON_MODERNIZATION_PROMPTS.md"],
+      "tools": [], "api": []
+    },
+    {
+      "name": "documentation-writer", "category": "platform", "status": "implemented",
+      "prompts": [],
+      "tools": ["app/USER_MANUAL.md", "README.md"],
+      "api": []
+    },
+    {
+      "name": "repository-engineer", "category": "platform", "status": "implemented",
+      "prompts": [],
+      "tools": ["README.md", "03-skills/", "04-prompts/"],
+      "api": []
+    }
+  ]
+}

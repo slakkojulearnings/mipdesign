@@ -1,0 +1,1 @@
+MIP manifesto placeholder.

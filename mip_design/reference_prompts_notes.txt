@@ -1,0 +1,78 @@
+
+Prompt : discovery & documentation ( app/cbl/*.cbl)
+A cobol documentation and traslation expert to help model java developers understand a cobol program.
+To make this process more efficient, can you actually launch multiple parallel instances of the @agent-cobol-documetation-translator.
+Tell me morre about what this repo does, and its high level architecture? Ffocus on the details of the directory structure and its contents.
+
+Generate the todo.list thath no files processed twice and nothign is missed.
+
+Also create memory files - catalog.txt: translate the cryptic anmes like CBAC4C into interest caclulator batch program
+relationships.txt - maps  every dependency using a simplepipe delimated format
+
+using these indicies, claud then genrate mermaid diagrams, a comple map of the daily batch processing workflow showing how the data flows from transaction inout through posting interet calculation and finally to cusotmer statements
+
+
+
+Prompt ;  - 
+I would like to migrate the cobol program @app/cbl/*.cbl to ava can you please plan the migratuon steps that are required? I would like to ensure the foloowing :
+1. The migrated code is written idimotic ava2. Hava set pf test to verify that the translated code matches byte by byte to the original cobol rogram. make sue of the sample data provide, ot if needed mock some synthetic verification purposes. If the original cobol code os not testable because of sequential files being required, make a translation of taht so it works with tets data you create, comptaible with gnucobol.
+
+the code shouud, live in specifc directory  direcory.
+
+Migrate the interest calculation batch program (CBACT04C.cbl) from COBOL to idiomatic Java with byte-by-byte verification
+
+Phase 1: Project Structure SetupCreate Maven/Gradle project in app/java/batch_processing_workflow/Set up dependencies: JUnit 5, AssertJ, Apache Commons IO, Log4j2Create package structure:com.carddemo.batch.interest – Main logiccom.carddemo.batch.interest.model – Data models (POJOs)com.carddemo.batch.interest.io – File I/O handlerscom.carddemo.batch.interest.util – Utilitiescom.carddemo.batch.interest.test – Test utilities
+
+Phase 2: Data Model Translation (Copybooks -> POJOs)Convert 5 copybooks to Java classes:TransactionCategoryBalance (CVTRA01Y) - 50 bytesCardCrossReference (CVACT03Y) - 50 bytesDisclosureGroup (CVTRA02Y) - 50 bytesAccountRecord (CVACT01Y) - 300 bytesTransactionRecord (CVTRA05Y) - 350 bytesEach with:Private fields with proper types (BigDecimal for money)Getters/settersSerialization/deserialization methodsBuilder pattern for testability
+
+Phase 3: File I/O LayerCreate abstraction for COBOL file operations:SequentialFileReader - For TCATBALF sequential accessIndexedFileHandler - For XREFFILE, ACCTFILE, DISCGRP random accessSequentialFileWriter - For TRANSACT outputSupport both fixed-length binary and ASCII test formats
+
+Phase 4: Core Business LogicTranslate program logic preserving COBOL behavior:InterestCalculationEngine - Main orchestratorAccountBreakDetector - Control break logicInterestRateResolver - Rate lookup with DEFAULT fallbackInterestCalculator - Formula: (Balance x Rate) ÷ 1200TransactionIdGenerator - Date + sequence suffix
+
+Phase 5: COBOL Test HarnessCreate testable COBOL version:Modify CBACT04C to accept text file parametersAdd GnuCOBOL-compatible compilation scriptCreate wrapper script to run with test dataOutput results to comparable format
+
+Phase 6: Test SuiteUnit tests – Each component in isolationIntegration tests – End-to-end with sample dataByte-by-byte verification – Compare Java vs COBOL outputsEdge case tests – Zero balances, missing rates, DEFAULT fallbackPerformance baseline – 50K records in < 30 seconds
+
+Phase 7: DocumentationArchitecture decision records (ADRs)JavaDoc for all public APIsMigration notes documenting COBOL→Java mappingsRunbook for production deployment
+
+
+Interview me to find the real goal of this project. Bias toward small, compartmentalized specs. Make me verify key decisions explicitly so nothing is missed.
+
+Key Points: Karpathy's CLAUDE.md Method
+• Utilize a CLAUDE.md file for persistent behavioral guidelines instead of micromanaging each prompt.
+
+• Prevents common failure modes: wrong assumptions, bloated code, unrequested edits, and premature stopping.
+
+• Core principles include Thinking Before Coding, prioritizing Simplicity First, making Surgical Changes, and focusing on Goal-Drive Execution.
+Specific Guidelines
+• Avoid ownership-dodging behaviour: Take responsibility for issues and work towards a solution instead of passing blame or marking things for future work.
+
+• Avoid premature stopping: Keep going until you have a complete solution rather than stopping at the first obstacle.
+
+• Avoid permission-seeking behaviour: If you have the knowledge and capability, take the initiative and act instead of asking if you should continue.
+Prompts and Thoughts
+• "You can outsource your thinking, but you can't outsource your understanding"
+
+• Avoid ownership-dodging behaviour
+
+• Avoid premature stopping
+
+• Avoid permission-seeking behaviour
+The Three-Layer Architecture
+• Layer 1: Raw sources – your curated collection of source documents (articles, papers, images, etc.).
+
+• Layer 2: The wiki – a directory of LLM-generated markdown files (summaries, entity pages, concept pages).
+
+• Layer 3: The schema – a document (like CLAUDE.md) that tells the LLM how the wiki is structured and what workflows to follow.
+
+
+Create a skill called /improve-system. When I call it, look at what just happened in this session and update my Internal OS to reflect it. If I iterated on a skill's output, update the skill's instructions. If I shared a lesson or story, save it to knowledge/me/experiences/. If something feels stale or duplicated, flag it. Save the skill file to skills/improve-system/skill.md.
+
+
+The /ingest-resource skill systematically brings a new resource (article URL, YouTube video, transcript, notes, attachment) into your Internal OS. It:
+
+1. Detects the source type
+2. Fetches or reads the content
+3. Summarizes it
+4. Files it in the right knowledge/ subfolder
+5. Cross-references related material

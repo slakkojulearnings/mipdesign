@@ -1,0 +1,18 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. CRDVAL.
+      *----------------------------------------------------------------
+      * Card validation. Called by CRDPOST.
+      *----------------------------------------------------------------
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       COPY CARDREC.
+       LINKAGE SECTION.
+       01 LK-RETURN-CODE      PIC S9(4) COMP.
+       PROCEDURE DIVISION USING CARD-RECORD LK-RETURN-CODE.
+       0000-MAIN.
+           IF CARD-STATUS = 'A'
+              MOVE 0 TO LK-RETURN-CODE
+           ELSE
+              MOVE 8 TO LK-RETURN-CODE
+           END-IF.
+           GOBACK.

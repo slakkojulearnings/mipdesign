@@ -1,0 +1,1 @@
+Design platform architecture for MIP.

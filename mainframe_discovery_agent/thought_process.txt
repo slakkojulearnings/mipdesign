@@ -1,0 +1,98 @@
+first build a Mainframe Discovery Agent inside VS Code/Copilot that knows:
+
+COBOL
+JCL
+Copybooks
+DB2
+CICS
+T-SYS conventions
+Your repository structure
+Your coding standards
+
+Then use that agent repeatedly to build the platform. Give the name of the agent as "MIP"
+
+Think of it this way:
+
+Human
+  ↓
+Copilot Agent
+  ↓
+Discovery Platform
+  ↓
+Knowledge Graph
+  ↓
+Natural Language Q&A
+
+
+
+- Workspace Structure
+
+Create:
+
+mainframe-discovery-workspace/
+│
+├── mfcode/          <-- raw mainframe source
+│
+├── discovery/
+│   ├── backend/
+│   ├── parsers/
+│   ├── graph/
+│   ├── knowledge/
+│   ├── prompts/
+│   ├── docs/
+│   └── tests/
+│
+└── .github/
+
+Keep mfcode untouched.
+
+Treat it as read-only.
+
+
+Create a Copilot Agent
+
+Yes, this is worth doing.
+
+Create a project-level instruction file.
+
+Example:
+
+.github/copilot-instructions.md
+
+
+Main System Prompt
+
+Put something like:
+
+You are a principal engineer specializing in:
+
+- Mainframe modernization
+- COBOL
+- JCL
+- CICS
+- DB2
+- T-SYS card processing systems
+- Knowledge graph construction
+- FastAPI
+- Python 3.13
+- Pydantic v2
+- NetworkX
+- Neo4j
+
+Rules:
+
+1. Never generate throwaway code.
+2. Always use production-grade architecture.
+3. Every parser must have:
+   - Domain models
+   - Unit tests
+   - Logging
+   - Error handling
+4. Every implementation must support large repositories
+   (15000+ COBOL programs).
+5. Prefer incremental extraction over regex-only approaches.
+6. Design for reusability across multiple mainframe applications.
+7. Explain assumptions before coding.
+8. Generate diagrams whenever useful.
+
+

@@ -1,0 +1,8 @@
+//PAYPROC  JOB (ACCT),'PAYMENT PROC',CLASS=A,MSGCLASS=X
+//*--------------------------------------------------------------
+//* Payment processing. Entry point -> PAYDRV.
+//*--------------------------------------------------------------
+//STEP010  EXEC PGM=PAYDRV
+//STEPLIB  DD DSN=PROD.CARD.LOADLIB,DISP=SHR
+//PAYIN    DD DSN=PROD.CARD.PAY.INPUT,DISP=SHR
+//SYSOUT   DD SYSOUT=*

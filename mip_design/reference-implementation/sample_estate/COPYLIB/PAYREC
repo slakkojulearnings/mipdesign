@@ -1,0 +1,7 @@
+      *----------------------------------------------------------------
+      * PAYREC - shared payment record layout (copybook).
+      *----------------------------------------------------------------
+       01  PAY-RECORD.
+           05  PAY-CARD-NUMBER    PIC X(16).
+           05  PAY-AMOUNT         PIC S9(7)V99 COMP-3.
+           05  PAY-DATE           PIC X(10).

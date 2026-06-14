@@ -1,0 +1,8 @@
+//STMTGEN  JOB (ACCT),'STATEMENT GEN',CLASS=A,MSGCLASS=X
+//*--------------------------------------------------------------
+//* Monthly statement generation. Entry point -> STMTDRV.
+//*--------------------------------------------------------------
+//STEP010  EXEC PGM=STMTDRV
+//STEPLIB  DD DSN=PROD.CARD.LOADLIB,DISP=SHR
+//STMTOUT  DD DSN=PROD.CARD.STMT.OUTPUT,DISP=(NEW,CATLG)
+//SYSOUT   DD SYSOUT=*

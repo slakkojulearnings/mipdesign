@@ -1,0 +1,118 @@
+My Recommended Roadmap
+Release 1
+
+Repository Discovery
+
+Goal:
+
+What exists?
+
+Output:
+
+Inventory
+Release 2
+
+Dependency Discovery
+
+Goal:
+
+How is everything connected?
+
+Output:
+
+Call Graph
+Lineage
+Release 3
+
+Business Discovery
+
+Goal:
+
+Why does this exist?
+
+Output:
+
+Business Rules
+Business Capabilities
+Release 4
+
+Reasoning
+
+Goal:
+
+Answer questions.
+
+Output:
+
+Natural Language Queries
+Release 5
+
+Modernization
+
+Goal:
+
+What should this become?
+
+Output:
+
+Service Candidates
+Java Skeletons
+API Recommendations
+Where Most Teams Fail
+
+They build:
+
+COBOL
+ ↓
+LLM
+ ↓
+Summary
+
+This impresses people for 5 minutes.
+
+Then fails.
+
+Instead:
+
+COBOL
+ ↓
+Metadata
+ ↓
+Graph
+ ↓
+Reasoning
+ ↓
+LLM
+
+This scales.
+
+Artifact Inventory
+
+Questions:
+
+What files exist?
+Program Catalog
+
+Questions:
+
+What programs exist?
+Call Graph
+
+Questions:
+
+Who calls whom?
+Data Lineage
+
+Questions:
+
+What tables are touched?
+
+No AI.
+
+No chat.
+
+No embeddings.
+
+No agents.
+
+Just facts.

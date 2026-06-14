@@ -1,0 +1,38 @@
+Build COBOL parser.
+
+Prompt:
+
+Act as a compiler engineer.
+
+Design a COBOL parser for modernization analysis.
+
+Extract:
+
+    - PROGRAM-ID
+    - CALL statements
+    - COPY statements
+    - EXEC SQL blocks
+    - File definitions
+
+Requirements:
+
+    - Large-scale repositories
+    - Incremental parsing
+    - Pydantic models
+    - Unit-testable architecture
+
+Output design only.
+Do not generate code yet.
+
+After design review:
+
+Generate production-grade implementation.
+
+Include:
+- domain models
+- parser
+- services
+- tests
+- examples
+
+Use Python 3.13.

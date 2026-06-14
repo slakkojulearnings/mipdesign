@@ -1,0 +1,93 @@
+mipdesign/
+
+docs/
+
+01-vision/
+  MIP_MANIFESTO.md
+  MIP_VISION.md
+  MIP_MISSION.md
+  MIP_MOAT_AND_FLYWHEEL.md
+
+02-strategy/
+  MIP_EXECUTIVE_SUMMARY.md
+  MIP_BUSINESS_CASE.md
+  MIP_LEADERSHIP_PITCH.md
+
+03-architecture/
+  MIP_TARGET_ARCHITECTURE.md
+  MIP_DOMAIN_MODEL.md
+  MIP_KNOWLEDGE_GRAPH_MODEL.md
+  MIP_METADATA_MODEL.md
+  MIP_COMPONENT_MODEL.md
+
+04-engineering/
+  MIP_ENGINEERING_PLAYBOOK.md
+  MIP_CODING_STANDARDS.md
+  MIP_TESTING_STRATEGY.md
+  MIP_WORKSPACE_BOOTSTRAP.md
+
+05-roadmap/
+  MIP_PHASE_0_FOUNDATION.md
+  MIP_PHASE_1_DISCOVERY.md
+  MIP_PHASE_2_CALL_GRAPH.md
+  MIP_PHASE_3_COPYBOOK.md
+  MIP_PHASE_4_DATA_LINEAGE.md
+  MIP_PHASE_5_KNOWLEDGE_GRAPH.md
+  MIP_PHASE_6_REASONING.md
+  MIP_PHASE_7_ADK_COPILOT.md
+  MIP_PHASE_8_BUSINESS_RULES.md
+  MIP_PHASE_9_MODERNIZATION.md
+
+06-tsys/
+  TSYS_DOMAIN_OVERVIEW.md
+  TSYS_ONBOARDING_GUIDE.md
+  TSYS_DISCOVERY_PLAYBOOK.md
+
+07-skills/
+  all skill.md files
+
+08-prompts/
+  all prompt libraries
+
+09-diagrams/
+  architecture diagrams
+  knowledge graph diagrams
+  metadata diagrams
+
+
+
+I recommend we build this repository incrementally:
+
+Wave 1 (Leadership Pack)
+
+Executive Summary
+Vision
+Manifesto
+Business Case
+Target Architecture
+Domain Model
+Roadmap
+
+Wave 2 (Engineering Pack)
+
+Engineering Playbook
+Skills
+Prompts
+Workspace Bootstrap
+Standards
+
+Wave 3 (Implementation Pack)
+
+SQLite Schema
+NetworkX Design
+ADK Design
+TSys Discovery Playbook
+Phase 0–4 detailed implementation
+
+Wave 4 (Demo Pack)
+
+Pitch deck
+Demo storyline
+Sample TSys walkthrough
+ROI model
+Modernization assessment

@@ -1,0 +1,38 @@
+Wave 2 Pack (Engineering)
+
+Generate, review, and package these documents in batches:
+
+MIP_WORKSPACE_BOOTSTRAP.md (10–15 pages)
+MIP_REPOSITORY_STRUCTURE.md (5–8 pages)
+MIP_GITHUB_COPILOT_STRATEGY.md (10+ pages)
+9 complete skills (3–5 pages each)
+Prompt library (20–30 prompt documents)
+MIP_CODING_STANDARDS.md
+MIP_TESTING_STRATEGY.md
+MIP_ENGINEERING_PLAYBOOK.md
+
+That is roughly 60–100 pages of material.
+
+Suggested workflow
+
+I'll generate the documents in logical batches:
+
+Batch 1
+
+MIP_WORKSPACE_BOOTSTRAP.md
+MIP_REPOSITORY_STRUCTURE.md
+MIP_GITHUB_COPILOT_STRATEGY.md
+
+Batch 2
+
+All 9 skills (fully detailed)
+
+Batch 3
+
+Complete prompt library
+
+Batch 4
+
+Coding Standards
+Testing Strategy
+Engineering Playbook

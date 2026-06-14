@@ -1,0 +1,26 @@
+Goal:
+
+Understand mainframe codebase repository 
+
+Prompt:
+
+Analyze the mfcode folder.
+
+Create a repository discovery strategy.
+
+Identify:
+
+- COBOL source patterns
+- JCL patterns
+- Copybook patterns
+- DB2 artifacts
+- CICS artifacts
+
+Generate:
+
+1. Discovery workflow
+2. Metadata schema
+3. Inventory schema
+4. Recommended extraction order
+
+Explain reasoning.

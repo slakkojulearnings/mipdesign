@@ -1,0 +1,17 @@
+Prompt Library Strategy
+
+Each prompt should be:
+
+Role
+
+Context
+
+Requirements
+
+Output Format
+
+Constraints
+
+Review Questions
+
+This creates consistent Copilot behavior.

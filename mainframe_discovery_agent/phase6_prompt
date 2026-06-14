@@ -1,0 +1,21 @@
+Natural language layer.
+
+Prompt:
+
+Design an AI question-answering layer on top of the knowledge graph.
+
+Questions include:
+
+- Which jobs execute program X?
+- Which programs update table Y?
+- Trace payment posting flow.
+- Find root program for batch Z.
+
+Design:
+
+- retrieval strategy
+- graph queries
+- context generation
+- hallucination prevention
+
+No code yet.
