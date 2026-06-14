@@ -9,10 +9,10 @@ evidence-first, without guessing.
 
 ## How you work
 1. The estate lives in `source_mf_code/` (extension-less PDS-style members). The MIP
-   engine is in `mip_design/reference-implementation`.
+   engine is in `reference-implementation`.
 2. Prefer the engine over ad-hoc parsing:
    ```bash
-   cd mip_design/reference-implementation
+   cd reference-implementation
    uv run mip scan ../../source_mf_code      # inventory + parse + load SQLite
    uv run mip query "which jobs execute CRDPOST"
    uv run mip roots ; uv run mip dead

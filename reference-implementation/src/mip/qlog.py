@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # Logs live next to the app so they're easy to find / leverage.
-_LOG_DIR = Path(__file__).resolve().parents[4] / "mip_design" / "app"
+_LOG_DIR = Path(__file__).resolve().parents[3] / "app"
 MD_PATH = _LOG_DIR / "question_log.md"
 JSONL_PATH = _LOG_DIR / "question_log.jsonl"
 

@@ -16,11 +16,11 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from . import cobol, qlog, queries, store
+from . import cobol, graphx, qlog, queries, store
 from .pipeline import build_db
 
 _PKG_ROOT = Path(__file__).resolve().parents[2]          # reference-implementation/
-_REPO_ROOT = Path(__file__).resolve().parents[4]         # mip_structure/
+_REPO_ROOT = Path(__file__).resolve().parents[3]         # repo root
 _DEFAULT_SOURCE = Path(os.environ.get("MIP_SOURCE") or (_REPO_ROOT / "source_mf_code"))
 _DB_PATH = _PKG_ROOT / "mip.api.db"
 
@@ -180,7 +180,19 @@ def get_graph() -> dict:
     _ensure_scanned()
     conn = _conn()
     out = queries.call_graph(conn)
-    out["insights"] = queries.graph_insights(conn)
+    ins = queries.graph_insights(conn)
+    ins["critical_by_pagerank"] = graphx.centrality(conn)   # NetworkX PageRank
+    out["insights"] = ins
+    conn.close()
+    return out
+
+
+@app.get("/api/program/{pid}/impact")
+def get_impact(pid: str) -> dict:
+    """Blast-radius / impact analysis via NetworkX (who breaks if this changes)."""
+    _ensure_scanned()
+    conn = _conn()
+    out = graphx.blast_radius(conn, pid.upper())
     conn.close()
     return out
 
@@ -237,7 +249,7 @@ def get_source(path: str = Query(...)) -> dict:
 
 
 # Serve the built frontend (production) if it has been built.
-_DIST = _REPO_ROOT / "mip_design" / "app" / "frontend" / "dist"
+_DIST = _REPO_ROOT / "app" / "frontend" / "dist"
 if _DIST.exists():
     from fastapi.staticfiles import StaticFiles
 

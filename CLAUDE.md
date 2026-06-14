@@ -1,35 +1,74 @@
-# MIP — Mainframe Intelligence Platform (repo root)
+# Working in the MIP repo — Agent & Engineer Guidelines
 
-> Project instructions for Claude Code. The canonical, shippable system lives in
-> **[`mip_design/`](mip_design/)** — start there. Its own
-> [`mip_design/CLAUDE.md`](mip_design/CLAUDE.md) has the full working rules.
+> This file makes the repo **self-instructing**: any Claude Code session (or engineer)
+> on any machine that opens this repo should follow these rules. They adapt the
+> community **Andrej Karpathy guidelines**
+> (github.com/multica-ai/andrej-karpathy-skills) to this project, and they reinforce the
+> MIP Engineering Principles in [`00-foundation/ENGINEERING_PRINCIPLES.md`](00-foundation/ENGINEERING_PRINCIPLES.md).
 
 ## What this repo is
-MIP turns a legacy mainframe estate into queryable, evidence-backed knowledge:
-`Inventory → Metadata → Knowledge Graph → Reasoning → Copilot → Modernization`.
-Thesis: **understand before you transform.**
+The single source of truth for the **Mainframe Intelligence Platform (MIP)** design:
+philosophy, principles, metadata model, algorithms, the canonical **skills** and
+**prompt library**, and a runnable **v0.1 reference implementation**. MIP's thesis:
+**understand the system before transforming it** — build Inventory → Metadata → Graph →
+Reasoning → Copilot → Modernization, in that order, never skipping a layer.
 
-- **Real source** to analyze: [`source_mf_code/`](source_mf_code/) (extension-less PDS-style members).
-- **Engine + tests**: [`mip_design/reference-implementation/`](mip_design/reference-implementation/) (Python 3.13, stdlib-only).
-- **Web app**: [`mip_design/app/`](mip_design/app/) (FastAPI + React).
-- **Skills** (project, Claude-Code-discoverable): [`.claude/skills/`](.claude/skills/) — canonical source in `mip_design/03-skills/`.
-- **Agents**: [`.claude/agents/`](.claude/agents/) — `mip-discovery`, `mip-modernization-architect`.
+## The four working rules
 
-## Working rules (short form — full set in mip_design/CLAUDE.md)
-1. **Think before coding**; surface assumptions; prefer the simpler approach.
-2. **Simplicity first**; minimal, non-speculative code.
-3. **Surgical changes**; touch only what's asked.
-4. **Goal-driven**; verify with tests, not confidence.
-5. **Evidence + confidence on every fact**; dynamic/inferred → `needs_review`, never asserted.
-6. **Skills are standard + cataloged**: edit in `mip_design/03-skills/`, re-deploy to
-   `.claude/skills/`, update `skills.catalog.json`, run `validate_catalog.py`.
+**1. Think before coding.**
+Don't assume; don't hide confusion; surface tradeoffs. State assumptions explicitly and
+ask when a requirement is ambiguous. Prefer the simpler approach and say so.
 
-## Quick start
-```bash
-# engine + tests
-cd mip_design/reference-implementation && uv venv --python 3.13 && uv pip install -e ".[dev,api]" && uv run pytest -q
-# scan the real source
-uv run mip scan ../../source_mf_code && uv run mip query "which jobs execute CRDPOST"
-# web app (serves built UI)
-cd ../app/frontend && npm install && npm run build && cd ../../reference-implementation && uv run uvicorn mip.api:app --port 8000
+**2. Simplicity first.**
+Write the minimum that solves the stated problem. No speculative features,
+abstractions, or config. No error handling for impossible cases. *If 200 lines could be
+50, rewrite it.* The reference implementation is deliberately small — keep it that way.
+
+**3. Surgical changes.**
+Touch only what the task requires. Match existing style. Don't refactor working code or
+reformat adjacent lines. Remove only what your own change orphaned. Flag pre-existing
+dead code; don't delete it unasked. Every changed line should trace to the request.
+
+**4. Goal-driven execution.**
+Turn tasks into verifiable success criteria. Write/extend the ground-truth test before
+changing a parser. Run `pytest` and the CLI before and after. Loop until verified — a
+green run is the definition of done, not a confident-sounding summary.
+
+## MIP-specific rules (non-negotiable)
+
+- **Evidence + confidence on every fact.** Anything not directly proven is `inferred`
+  or `needs_review` with confidence < 1.0. Never present inference as `confirmed`.
+  Dynamic calls and unresolved targets are *kept and flagged*, never dropped.
+- **Degrade gracefully.** Partial/missing source is the normal case. Produce the best
+  evidence-based result, record the gap, lower confidence — never fabricate.
+- **AI consumes knowledge, it doesn't replace it.** LLM output (explanations,
+  translations, recommendations) is a *proposal* grounded in and citing the graph, and
+  is verified by tests before it becomes a decision.
+- **Be honest about scale.** State numbers the chosen tools (SQLite, NetworkX) actually
+  hit; name the trigger + target before claiming more. See
+  [`00-foundation/ARCHITECTURE.md`](00-foundation/ARCHITECTURE.md).
+- **Skills are standard + cataloged.** Skills follow the Agent Skills spec (folder +
+  `SKILL.md` with `name`/`description` frontmatter). When you add/delete/rename a skill,
+  update [`03-skills/skills.catalog.json`](03-skills/skills.catalog.json) in the same
+  change and run `python 03-skills/validate_catalog.py` (must pass).
+
+## Map of the repo
+- `00-foundation/` — philosophy, principles, architecture (+ honest scale plan)
+- `01-metadata-model/` — `ENTITIES.md`, `RELATIONSHIPS.md`, `models.py`, `schema.sql`
+- `02-algorithms/` — concrete pseudocode for root/impact/lineage/clustering
+- `03-skills/` — the 12 canonical skills + `MIP_ENGINEERING_PRINCIPLES.md` + `modernization-leverage/`
+- `04-prompts/` — canonical V2 prompt library + `community/` modernization prompts
+- `05-build-plan/` — the v0.1 vertical-slice plan
+- `reference-implementation/` — runnable Python v0.1 + `sample_estate/` + tests
+- `ASSESSMENT.md` — the three assessments of the original repo
+
+## Run the reference implementation (any machine)
 ```
+cd reference-implementation
+python -m pip install -e .
+mip scan sample_estate/                 # inventory + parse + load SQLite
+mip query "which jobs execute CRDPOST"  # root-driver query
+pytest                                  # ground-truth precision/recall
+```
+Pure-Python, standard-library + pydantic/typer/networkx only — no mainframe and no
+network required. Portable across machines.

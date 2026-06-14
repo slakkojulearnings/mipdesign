@@ -7,8 +7,8 @@ __pycache__/
 
 # MIP runtime artifacts
 *.db
-mip_design/app/question_log.md
-mip_design/app/question_log.jsonl
+app/question_log.md
+app/question_log.jsonl
 
 # Node / frontend build
 node_modules/

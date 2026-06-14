@@ -15,7 +15,7 @@ code blindly.
    first; cite the dependency/criticality evidence for the ordering.
 4. Apply the skills in `.claude/skills/`: mainframe-modernization-architect,
    business-capability-analyst, resilience-engineer. For COBOL→Java use the
-   community prompts in `mip_design/04-prompts/community/COMMON_MODERNIZATION_PROMPTS.md`
+   community prompts in `04-prompts/community/COMMON_MODERNIZATION_PROMPTS.md`
    (explain → extract rules → characterization tests → translate → verify).
 
 ## Rules

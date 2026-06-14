@@ -17,7 +17,7 @@ Python 3.13+, no network required.**
 ## Setup & run with `uv` (recommended)
 
 ```bash
-cd mip_design/reference-implementation
+cd reference-implementation
 uv venv --python 3.13
 uv pip install -e ".[dev]"
 

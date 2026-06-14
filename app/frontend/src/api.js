@@ -11,6 +11,7 @@ export const api = {
   programs: () => fetch("/api/programs").then(j),
   program: (pid) => fetch(`/api/program/${encodeURIComponent(pid)}`).then(j),
   profile: (pid) => fetch(`/api/program/${encodeURIComponent(pid)}/profile`).then(j),
+  impact: (pid) => fetch(`/api/program/${encodeURIComponent(pid)}/impact`).then(j),
   jobs: () => fetch("/api/jobs").then(j),
   roots: () => fetch("/api/roots").then(j),
   deadcode: () => fetch("/api/deadcode").then(j),
