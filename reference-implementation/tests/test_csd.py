@@ -39,6 +39,26 @@ def test_transaction_shows_as_caller_of_entry_program():
     assert "AUTHTRAN" in roots            # entry program is still the root-driver
 
 
+def test_starts_only_program_is_root_not_dead():
+    # BUG 2 regression: a program that is ONLY a CSD transaction's PROGRAM (STARTS target),
+    # with no EXEC CICS of its own, must be an online root and never flagged dead.
+    from mip.records import Edge, Evidence
+    with tempfile.TemporaryDirectory() as d:
+        db = str(Path(d) / "mip.db")
+        conn = store.connect(db)
+        conn.execute("INSERT INTO program (program_id, program_name, language, discovered_at)"
+                     " VALUES ('ONLPGM','ONLPGM','cobol','t')")
+        store.insert_edge(conn, Edge.build(
+            "transaction", "TX", "STARTS", "program", "ONLPGM",
+            Evidence(source_evidence="CICS/X:1", discovery_method="cics-csd",
+                     confidence=1.0, validation_status="confirmed")))
+        conn.commit()
+        roots = set(queries.roots(conn))
+        dead = set(queries.dead_code(conn))
+        conn.close()
+    assert "ONLPGM" in roots and "ONLPGM" not in dead
+
+
 def test_parser_backend_switch_default():
     info = parser_backend.backend_info()
     assert info["requested"] == "default"

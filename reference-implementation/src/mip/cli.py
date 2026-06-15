@@ -21,7 +21,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     print(f"  artifacts : {c['artifacts']}  {c['by_type']}")
     print(f"  programs  : {c['programs']}")
     print(f"  jobs      : {c['jobs']}  (steps: {c['steps']})")
-    print(f"  edges     : {c['edges']}  (needs_review: {c['needs_review_edges']})")
+    print(f"  edges     : {c['edges']}  (needs_review: {c['needs_review_edges']}, "
+          f"inferred: {c['inferred_edges']})")
     return 0
 
 

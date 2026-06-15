@@ -84,6 +84,50 @@ def test_compute_and_add_lineage():
     assert ("TAX", "TOTAL", "arith") in flows           # ADD TAX TO TOTAL
 
 
+def _lineage(src):
+    return {(f["src"], f["dst"], f["kind"])
+            for f in cobol.field_lineage(src, "T", "T")}
+
+
+def _wrap(proc_body, data="01 A PIC 9(4).\n       01 B PIC 9(4).\n       01 C PIC 9(4)."):
+    return (f"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. T.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       {data}
+       PROCEDURE DIVISION.
+       0000-MAIN.
+{proc_body}
+           GOBACK.
+""")
+
+
+def test_arith_giving_does_not_leak_separator_keywords():
+    # BUG 1 regression: TO/FROM/BY must never appear as a "source" field.
+    flows = _lineage(_wrap("           ADD A TO B GIVING C.\n"
+                           "           SUBTRACT A FROM B GIVING C."))
+    bad = {(s, d, k) for (s, d, k) in flows if s in {"TO", "FROM", "BY", "INTO", "GIVING"}}
+    assert not bad, f"separator keyword leaked as a field: {bad}"
+    assert ("A", "C", "arith") in flows and ("B", "C", "arith") in flows
+
+
+def test_compute_rounded_and_multi_receiver():
+    # BUG 3 regression: ROUNDED isn't a source; receivers are left of '='.
+    flows = _lineage(_wrap("           COMPUTE C ROUNDED = A + B."))
+    assert ("A", "C", "compute") in flows and ("B", "C", "compute") in flows
+    assert not any(s == "ROUNDED" for (s, _, _) in flows)
+
+
+def test_move_with_qualifier_and_subscript_not_dropped():
+    # BUG 4 regression: MOVE A OF REC TO B  and  MOVE T(IDX) TO B must still yield a flow.
+    data = ("01 REC.\n          05 A PIC X(4).\n"
+            "       01 T.\n          05 ELEM PIC X OCCURS 5 TIMES.\n"
+            "       01 B PIC X(4).")
+    flows = _lineage(_wrap("           MOVE A OF REC TO B.", data=data))
+    assert ("A", "B", "move") in flows
+
+
 def test_group_move_flagged():
     snippet = """\
        IDENTIFICATION DIVISION.

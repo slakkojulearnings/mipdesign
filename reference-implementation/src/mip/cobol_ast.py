@@ -146,6 +146,32 @@ def parse(text: str) -> Unit:
 
 _ARITH = {"ADD", "SUBTRACT", "MULTIPLY", "DIVIDE"}
 _ARITH_SEP = ("TO", "FROM", "INTO", "BY")
+_OPERATORS = {"=", "+", "-", "*", "/", "**"}
+# tokens that are never a data name: separators, arithmetic options, qualifiers, operators
+_SKIP = {"TO", "FROM", "INTO", "BY", "GIVING", "ROUNDED", "REMAINDER", "OF", "IN",
+         "TIMES"} | _OPERATORS
+
+
+def _names(tokens: list[str]) -> list[str]:
+    """Distinct data-names in a token slice. Skips separator/option keywords, operators,
+    parenthesised subscripts/reference-mods, and qualifier tails (the X in `A OF X`)."""
+    out, depth, prev = [], 0, None
+    for t in tokens:
+        if t == "(":
+            depth += 1; prev = "("; continue
+        if t == ")":
+            depth = max(0, depth - 1); prev = ")"; continue
+        if depth > 0:
+            continue
+        T = t.upper()
+        if re.fullmatch(_WORD, t) and T not in _SKIP and prev not in ("OF", "IN"):
+            out.append(T)
+        prev = T
+    seen, res = set(), []
+    for x in out:
+        if x not in seen:
+            seen.add(x); res.append(x)
+    return res
 
 
 def _group_items(items: list[dict]) -> set[str]:
@@ -168,22 +194,18 @@ def _clause(toks: list[tuple[str, int]], i: int) -> tuple[list[str], int]:
 
 
 def _arith_flows(clause: list[str]) -> list[tuple[str, str]]:
-    """Source->target field derivations for ADD/SUBTRACT/MULTIPLY/DIVIDE."""
+    """Source->target field derivations for ADD/SUBTRACT/MULTIPLY/DIVIDE.
+    _names() drops the separator/option keywords so they can't leak in as fields."""
     up = [c.upper() for c in clause]
-    words = [w for w in up if re.fullmatch(_WORD, w)]
-
-    def w(seq):
-        return [x for x in seq if re.fullmatch(_WORD, x)]
-
     if "GIVING" in up:
         gi = up.index("GIVING")
-        srcs, tgts = w(up[:gi]), w(up[gi + 1:])
+        srcs, tgts = _names(clause[:gi]), _names(clause[gi + 1:])
     else:
         sep = next((k for k in _ARITH_SEP if k in up), None)
         if sep is None:
             return []
         si = up.index(sep)
-        srcs, tgts = w(up[:si]), w(up[si + 1:])
+        srcs, tgts = _names(clause[:si]), _names(clause[si + 1:])
     return [(s, t) for s in srcs for t in tgts if s != t]
 
 
@@ -197,31 +219,33 @@ def _parse_procedure(toks: list[tuple[str, int]], u: Unit) -> None:
         T = tok.upper()
 
         if T == "MOVE":
-            src = toks[i + 1][0] if i + 1 < n else ""
-            j = i + 2
-            targets = []
-            if j < n and toks[j][0].upper() == "TO":
-                j += 1
-                while j < n and toks[j][0] != "." and toks[j][0].upper() not in _VERBS:
-                    if re.fullmatch(_WORD, toks[j][0]):
-                        targets.append(toks[j][0].upper())
-                    j += 1
-            if src and src[0] in "'\"":                       # literal move -> const
-                lit = _strip_quotes(src)
+            clause, j = _clause(toks, i)
+            up = [c.upper() for c in clause]
+            if "TO" in up:
+                ti = up.index("TO")
+                left, right = clause[:ti], clause[ti + 1:]
+            else:
+                left, right = clause[:1], []
+            targets = _names(right)                            # robust to OF/IN + subscripts
+            first = left[0] if left else ""
+            if first and first[0] in "'\"":                   # literal move -> const
+                lit = _strip_quotes(first)
                 for t in targets:
                     const[t] = lit
-            elif re.fullmatch(_WORD, src):                    # field-to-field flow
-                s = src.upper()
-                kind = "move-group" if s in groups else "move"   # group move = all sub-fields
-                for t in targets:
-                    u.field_flows.append({"src": s, "dst": t, "kind": kind, "line": ln})
-                    if s in const:
-                        const[t] = const[s]
-                    else:
+            else:
+                src_names = _names(left)                       # source skips qualifiers/refmod
+                if src_names:                                  # field-to-field flow
+                    s = src_names[0]
+                    kind = "move-group" if s in groups else "move"
+                    for t in targets:
+                        u.field_flows.append({"src": s, "dst": t, "kind": kind, "line": ln})
+                        if s in const:
+                            const[t] = const[s]
+                        else:
+                            const.pop(t, None)
+                else:                                          # numeric/other -> clears const
+                    for t in targets:
                         const.pop(t, None)
-            else:                                             # numeric/other -> clears const
-                for t in targets:
-                    const.pop(t, None)
             i = j
             continue
 
@@ -242,14 +266,15 @@ def _parse_procedure(toks: list[tuple[str, int]], u: Unit) -> None:
             i += 2
             continue
 
-        if T == "COMPUTE":                                   # COMPUTE t = expr(a, b, …)
+        if T == "COMPUTE":                                   # COMPUTE t [ROUNDED] = expr(a,b,…)
             clause, j = _clause(toks, i)
-            if clause and re.fullmatch(_WORD, clause[0]):
-                target = clause[0].upper()
-                for w in clause[1:]:
-                    if re.fullmatch(_WORD, w):
-                        u.field_flows.append({"src": w.upper(), "dst": target,
-                                              "kind": "compute", "line": ln})
+            if "=" in clause:
+                ei = clause.index("=")
+                targets = _names(clause[:ei])                 # receivers (drops ROUNDED)
+                sources = _names(clause[ei + 1:])             # operands in the expression
+                for s in sources:
+                    for t in targets:
+                        u.field_flows.append({"src": s, "dst": t, "kind": "compute", "line": ln})
             i = j
             continue
 

@@ -12,7 +12,7 @@ def build_db(estate_path: str | Path, db_path: str | Path) -> dict:
     estate = Path(estate_path)
     conn = store.connect(db_path)
     counts = {"artifacts": 0, "programs": 0, "jobs": 0, "steps": 0,
-              "edges": 0, "needs_review_edges": 0, "by_type": {}}
+              "edges": 0, "needs_review_edges": 0, "inferred_edges": 0, "by_type": {}}
 
     artifacts = scanner.scan(estate)
     for a in artifacts:
@@ -35,6 +35,8 @@ def build_db(estate_path: str | Path, db_path: str | Path) -> dict:
                 counts["edges"] += 1
                 if e.evidence.validation_status == "needs_review":
                     counts["needs_review_edges"] += 1
+                elif e.evidence.validation_status == "inferred":
+                    counts["inferred_edges"] += 1
 
         elif a.artifact_type == "jcl":
             job, steps, edges = jcl.parse_jcl(text, a.artifact_id, a.path)

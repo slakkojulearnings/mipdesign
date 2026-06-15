@@ -55,11 +55,15 @@ def roots(conn: sqlite3.Connection) -> list[str]:
     # root is an entry point that nothing else calls.
     executed = {r["target_id"] for r in conn.execute(
         "SELECT target_id FROM relationship WHERE rel_type='EXECUTES' AND target_type='program'")}
+    # online entry programs: issue EXEC CICS themselves, OR are the PROGRAM of a CSD
+    # transaction (STARTS). Either is an entry point even with no EXEC CICS of its own.
     online = {r["source_id"] for r in conn.execute(
         "SELECT DISTINCT source_id FROM relationship WHERE discovery_method='cics'")}
+    started = {r["target_id"] for r in conn.execute(
+        "SELECT target_id FROM relationship WHERE rel_type='STARTS' AND target_type='program'")}
     called = {r["target_id"] for r in conn.execute(
         "SELECT target_id FROM relationship WHERE rel_type='CALLS'")}
-    return sorted((executed | online) - called)
+    return sorted((executed | online | started) - called)
 
 
 def dead_code(conn: sqlite3.Connection) -> list[str]:
@@ -157,6 +161,8 @@ def summary(conn: sqlite3.Connection) -> dict:
         "edges": scalar("SELECT COUNT(*) FROM relationship"),
         "needs_review_edges": scalar(
             "SELECT COUNT(*) FROM relationship WHERE validation_status='needs_review'"),
+        "inferred_edges": scalar(
+            "SELECT COUNT(*) FROM relationship WHERE validation_status='inferred'"),
         "roots": len(roots(conn)),
         "dead_code": len(dead_code(conn)),
     }
@@ -284,12 +290,13 @@ def graph_insights(conn: sqlite3.Connection) -> dict:
 
 # --- tiny NL router -------------------------------------------------------
 def _program_in(text: str, known: list[str]) -> str | None:
+    # Only ever return a real program name — never a stray uppercase word like SHOW/WHAT,
+    # which would attach a confident-looking trace to a non-existent program.
     up = text.upper()
     for p in known:
         if re.search(rf"\b{re.escape(p)}\b", up):
             return p
-    m = re.search(r"\b([A-Z][A-Z0-9]{2,7})\b", up)
-    return m.group(1) if m else None
+    return None
 
 
 def answer(conn: sqlite3.Connection, question: str) -> tuple[str, object]:
