@@ -1,0 +1,29 @@
+{
+  "window": "2026-05",
+  "source": "SMF type-30 (batch) + CICS monitor (online), May 2026",
+  "entities": [
+    {"id": "AUTHTRAN", "type": "program", "exec_count": 4820500, "last_run": "2026-05-31", "avg_elapsed_ms": 38},
+    {"id": "AUTHVAL", "type": "program", "exec_count": 4820500, "last_run": "2026-05-31", "avg_elapsed_ms": 11},
+    {"id": "AUTH", "type": "transaction", "exec_count": 4820500, "last_run": "2026-05-31", "avg_elapsed_ms": 52},
+
+    {"id": "CRDPOST", "type": "program", "exec_count": 31000, "last_run": "2026-05-31", "avg_elapsed_ms": 1200},
+    {"id": "CRDVAL", "type": "program", "exec_count": 31000, "last_run": "2026-05-31", "avg_elapsed_ms": 140},
+    {"id": "BALUPD", "type": "program", "exec_count": 30880, "last_run": "2026-05-31", "avg_elapsed_ms": 95},
+    {"id": "DAILYCRD", "type": "job", "exec_count": 31, "last_run": "2026-05-31", "avg_elapsed_ms": 1850000},
+
+    {"id": "STMTDRV", "type": "program", "exec_count": 1, "last_run": "2026-05-01", "avg_elapsed_ms": 4200000},
+    {"id": "STMTFMT", "type": "program", "exec_count": 215000, "last_run": "2026-05-01", "avg_elapsed_ms": 18},
+    {"id": "STMTGEN", "type": "job", "exec_count": 1, "last_run": "2026-05-01", "avg_elapsed_ms": 4200000},
+
+    {"id": "PAYDRV", "type": "program", "exec_count": 21, "last_run": "2026-05-30", "avg_elapsed_ms": 620000},
+    {"id": "PAYUPD", "type": "program", "exec_count": 18400, "last_run": "2026-05-30", "avg_elapsed_ms": 73},
+    {"id": "PAYPROC", "type": "job", "exec_count": 21, "last_run": "2026-05-30", "avg_elapsed_ms": 640000},
+
+    {"id": "INTDRV", "type": "program", "exec_count": 1, "last_run": "2026-05-31", "avg_elapsed_ms": 2100000},
+    {"id": "INTCOMP", "type": "program", "exec_count": 480000, "last_run": "2026-05-31", "avg_elapsed_ms": 22},
+    {"id": "INTRATE1", "type": "program", "exec_count": 480000, "last_run": "2026-05-31", "avg_elapsed_ms": 9},
+    {"id": "INTCALC", "type": "job", "exec_count": 1, "last_run": "2026-05-31", "avg_elapsed_ms": 2150000},
+
+    {"id": "DEADPROG", "type": "program", "exec_count": 0, "last_run": null, "avg_elapsed_ms": null}
+  ]
+}

@@ -1,6 +1,9 @@
 .venv/
+.venv-adv/
 __pycache__/
 *.pyc
 *.db
 *.egg-info/
 .pytest_cache/
+# ANTLR tool jar + fetched .g4 + raw generator output (scripts/gen_grammar.py)
+.antlr_build/

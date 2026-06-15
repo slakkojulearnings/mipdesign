@@ -71,3 +71,16 @@ def insert_edge(conn: sqlite3.Connection, e: Edge) -> None:
         (e.relationship_id, e.source_type, e.source_id, e.rel_type, e.target_type,
          e.target_id, *_ev(e.evidence)),
     )
+
+
+def insert_runtime_metric(conn: sqlite3.Connection, entity_type: str, entity_id: str,
+                          exec_count, last_run, avg_elapsed_ms, window: str,
+                          source_evidence: str, discovered_at: str) -> None:
+    """Upsert one observed runtime metric (keyed by entity + window)."""
+    conn.execute(
+        "INSERT OR REPLACE INTO runtime_metric (entity_type, entity_id, exec_count,"
+        " last_run, avg_elapsed_ms, window, source_evidence, discovered_at)"
+        " VALUES (?,?,?,?,?,?,?,?)",
+        (entity_type, entity_id, exec_count, last_run, avg_elapsed_ms, window,
+         source_evidence, discovered_at),
+    )

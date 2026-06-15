@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import cobol, export, graphx, parser_backend, qlog, queries, store
+from . import cobol, export, graphx, parser_backend, qlog, queries, runtime, store
 from .pipeline import build_db
 
 _PKG_ROOT = Path(__file__).resolve().parents[2]          # reference-implementation/
@@ -60,6 +60,24 @@ def _ensure_scanned():
     conn.close()
     if not has and _state["source"].exists():
         build_db(_state["source"], _DB_PATH)
+
+
+def _runtime_path() -> Path:
+    return _state["source"] / "runtime" / "runtime.json"
+
+
+def _ensure_runtime():
+    """Auto-load runtime/runtime.json from the source root on first use if present and
+    nothing is loaded yet (mirrors _ensure_scanned). No-op if the file is absent —
+    runtime data is optional external evidence."""
+    conn = _conn()
+    has = conn.execute("SELECT COUNT(*) FROM runtime_metric").fetchone()[0]
+    conn.close()
+    rt_path = _runtime_path()
+    if not has and rt_path.is_file():
+        conn = _conn()
+        runtime.load_into_db(conn, runtime.load_runtime(rt_path))
+        conn.close()
 
 
 class ScanResult(BaseModel):
@@ -352,6 +370,54 @@ def get_source(path: str = Query(...)) -> dict:
     if not target.is_file():
         raise HTTPException(404, f"not found: {path}")
     return {"path": path, "text": target.read_text(encoding="utf-8", errors="replace")}
+
+
+@app.post("/api/runtime/load")
+def post_runtime_load() -> dict:
+    """Load runtime evidence from <source-root>/runtime/runtime.json and upsert it.
+
+    Runtime data is optional external operational evidence. 404 with guidance if the
+    file is absent so the caller knows where to put it."""
+    _ensure_scanned()
+    rt_path = _runtime_path()
+    if not rt_path.is_file():
+        raise HTTPException(
+            404, f"no runtime evidence at {rt_path}. Place a runtime file at "
+                 "<source-root>/runtime/runtime.json "
+                 '({"window":"YYYY-MM","entities":[{"id","type","exec_count",'
+                 '"last_run","avg_elapsed_ms"}]}).')
+    rt = runtime.load_runtime(rt_path)
+    conn = _conn()
+    n = runtime.load_into_db(conn, rt)
+    conn.close()
+    return {"loaded": n, "window": rt.get("window"), "source": rt.get("source"),
+            "path": str(rt_path)}
+
+
+@app.get("/api/runtime")
+def get_runtime() -> dict:
+    """Correlated runtime view: per-entity metrics, static-vs-runtime reconciliation,
+    and runtime-weighted criticality. Auto-loads runtime/runtime.json on first use."""
+    _ensure_scanned()
+    _ensure_runtime()
+    rt_path = _runtime_path()
+    if not rt_path.is_file():
+        return {"window": None, "available": False,
+                "message": f"no runtime evidence found at {rt_path}; "
+                           "correlation skipped (all entities would be 'unknown').",
+                "metrics": [], "reconciliation": {}, "criticality": []}
+    rt = runtime.load_runtime(rt_path)
+    conn = _conn()
+    out = {
+        "available": True,
+        "window": rt.get("window"),
+        "source": rt.get("source"),
+        "metrics": runtime.correlate(conn, rt),
+        "reconciliation": runtime.reconcile(conn, rt),
+        "criticality": runtime.runtime_criticality(conn, rt),
+    }
+    conn.close()
+    return out
 
 
 # Serve the built frontend (production) if it has been built.

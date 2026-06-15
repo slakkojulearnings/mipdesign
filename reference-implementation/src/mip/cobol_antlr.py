@@ -40,7 +40,8 @@ def parse(text: str):
     from .grammar.Cobol85Parser import Cobol85Parser
     from . import antlr_adapter   # walks the ANTLR tree -> mip Unit (ships with the grammar)
 
-    stream = antlr4.InputStream(antlr_adapter.preprocess(text))   # expands COPY/REPLACING
+    pre = antlr_adapter.preprocess(text)        # normalize + expand COPY/REPLACING + fold EXEC
+    stream = antlr4.InputStream(pre)
     parser = Cobol85Parser(antlr4.CommonTokenStream(Cobol85Lexer(stream)))
     tree = parser.startRule()
-    return antlr_adapter.to_unit(tree, text)
+    return antlr_adapter.to_unit(tree, text, pre)

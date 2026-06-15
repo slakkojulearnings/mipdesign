@@ -123,6 +123,26 @@ CREATE INDEX IF NOT EXISTS idx_rel_target ON relationship(target_type, target_id
 CREATE INDEX IF NOT EXISTS idx_rel_validation ON relationship(validation_status);
 
 -- ---------------------------------------------------------------------------
+-- Runtime metrics (Level 5: operational evidence)
+-- Optional external runtime/operational evidence correlated with the static graph.
+-- This is observed, not parsed: discovery_method='runtime', confidence reflects that
+-- it is direct execution evidence for the window it covers. Absent rows => "unknown".
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS runtime_metric (
+    entity_type     TEXT NOT NULL,              -- program | job | transaction
+    entity_id       TEXT NOT NULL,
+    exec_count      INTEGER,                     -- executions observed in the window
+    last_run        TEXT,                        -- ISO date of last observed run
+    avg_elapsed_ms  REAL,                        -- average elapsed time per execution
+    window          TEXT,                        -- reporting window, e.g. "2026-05"
+    -- evidence envelope (runtime is observed external evidence)
+    source_evidence TEXT,
+    discovered_at   TIMESTAMP NOT NULL,
+    PRIMARY KEY (entity_type, entity_id, window)
+);
+CREATE INDEX IF NOT EXISTS idx_runtime_entity ON runtime_metric(entity_type, entity_id);
+
+-- ---------------------------------------------------------------------------
 -- Convenience views (graph materialization)
 -- ---------------------------------------------------------------------------
 -- Which programs each program calls

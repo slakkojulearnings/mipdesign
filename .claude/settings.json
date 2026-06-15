@@ -14,7 +14,13 @@
       "Bash(git log:*)",
       "Read(./**)",
       "Bash(git add *)",
-      "Bash(git commit -q -m ' *)"
+      "Bash(git commit -q -m ' *)",
+      "Bash(java -version)",
+      "Bash(echo \"---JAVA_EXIT:$?---\")",
+      "Bash(pip show *)",
+      "Bash(echo \"---EXIT:$?---\")",
+      "Read(//c/Users/srika/**)",
+      "Bash(ls -la /c/*.jar)"
     ]
   }
 }
