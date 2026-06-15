@@ -1,78 +1,211 @@
 # MIP — Mainframe Intelligence Platform
 
-> **Understand the system before you transform it.** MIP turns a legacy mainframe
-> estate into queryable, evidence-backed knowledge — so a new engineer can answer in
-> seconds what used to take weeks of SME time.
->
-> This repository is the **single source of truth**: philosophy, principles,
-> metadata model, algorithms, the canonical skills + prompt library, and a **runnable,
-> tested v0.1 reference implementation**. It consolidates ~50 scattered design docs and
-> fixes the gaps found in review (see [`ASSESSMENT.md`](ASSESSMENT.md)).
-
-## The idea in one picture
+> **Understand the system before you transform it.** MIP turns a legacy mainframe estate
+> (COBOL, JCL, copybooks, DB2, CICS, CSD) into queryable, evidence-backed knowledge — so
+> a new engineer answers in seconds what used to take weeks of SME time. Every fact
+> carries **evidence + a confidence**; anything inferred is flagged, never asserted.
 
 ```
 Source Code → Inventory → Metadata → Knowledge Graph → Reasoning → Copilot → Modernization
               (never skip a layer; AI consumes facts, it doesn't invent them)
 ```
 
-The first thread to pull is the **root / driver program**: in a batch mainframe,
-execution starts in JCL (`EXEC PGM=`), not COBOL. Find the roots, and the system
-becomes navigable. The v0.1 implementation does exactly this — and it runs today.
+- **Engine** — `reference-implementation/` (Python 3.13, stdlib-only runtime; optional extras)
+- **Web app** — `app/` (FastAPI API + React/Vite UI)
+- **Your code goes in** — `source_mf_code/` (or point `MIP_SOURCE` anywhere)
+- **Tests** — **84 passing** (engine + graph + parser + app endpoints); advanced ANTLR backend parity **28**
+- **Repo design** — `00-foundation/` … `05-build-plan/`, the 12 skills in `03-skills/`, prompts in `04-prompts/`
 
-## Map of the folder
+For a screen-by-screen tour see [`app/USER_MANUAL.md`](app/USER_MANUAL.md); for leadership-facing
+samples see [`docs/showcase/`](docs/showcase/); fresh-machine steps in [`readme_setup.md`](readme_setup.md).
+
+---
+
+## 1. Setup
+
+Prereqs: **Python 3.13+**, **uv** (`pip install uv`), **Node 18+** (UI only), git.
+
+```bash
+git clone https://github.com/slakkojulearnings/mipdesign.git
+cd mipdesign/reference-implementation
+uv venv --python 3.13
+uv pip install -e ".[dev,api]"          # engine + tests + API + NetworkX
+# optional: ".[dev,api,advanced]" also installs the ANTLR runtime for MIP_PARSER=advanced
+```
+
+## 2. Run the engine (CLI)
+
+```bash
+# scan ANY estate — the sample, your real code in ../source_mf_code, or any path
+uv run mip scan ../source_mf_code        # inventory + parse + load SQLite (writes mip.db)
+
+uv run mip query "which jobs execute CRDPOST"     # → DAILYCRD
+uv run mip query "what does AUTHTRAN call"        # online CICS LINK → AUTHVAL
+uv run mip roots                                  # batch + online entry points
+uv run mip dead                                   # dead-code candidates
+```
+
+## 3. Run the web app
+
+```bash
+# build the UI (from repo root)
+cd app/frontend && npm install && npm run build
+# serve API + UI on one port (from reference-implementation)
+cd ../../reference-implementation && uv run uvicorn mip.api:app --port 8000
+# open http://localhost:8000     (dev mode with hot reload: `npm run dev` in app/frontend)
+```
+Screens: Dashboard · Programs (search/sort/facets) · Capabilities · Jobs · **Call Graph**
+(zoom/pan, confidence slider, edge filter, keyboard/ARIA) · Roots · Dead Code · **Query
+Console** (deep-linkable `#/query?q=…`, logged reasoning) · **Q&A Log** · plus per-program
+**Sequence diagram**, **Field-lineage diagram**, **Impact/blast-radius**, **Business rules**,
+**Export** (JSON/CSV/GraphML) and click-to-evidence drill-down.
+
+## 4. Configuration (environment variables)
+
+| Var | Default | Effect |
+|-----|---------|--------|
+| `MIP_SOURCE` | `<repo>/source_mf_code` | estate the API scans |
+| `MIP_PARSER` | `default` | `advanced` uses the ANTLR COBOL-85 backend if built, else falls back (see [ADVANCED_PARSER.md](reference-implementation/ADVANCED_PARSER.md)) |
+| `MIP_WORKERS` | all CPU cores | parse parallelism (`1` forces serial) |
+| `MIP_BINARY_LIBS` | — | comma-separated extra compiled-library folder names treated as binary |
+
+---
+
+## 5. Test the complete functionality
+
+Run everything:
+```bash
+cd reference-implementation
+uv run pytest -q                          # 84 passing
+python ../03-skills/validate_catalog.py   # skills ⇄ catalog in sync (12 skills)
+cd ../app/frontend && npm run build       # UI compiles
+```
+
+Per-capability (each maps to a test you can run on its own):
+
+| Capability | How to see it work | Test |
+|------------|--------------------|------|
+| Discovery, roots, dead code, precision/recall | `uv run python tests/test_groundtruth.py` (prints metrics) | `test_groundtruth.py` |
+| Grammar parser / AST, dynamic-call resolution, arithmetic + group-move lineage | `uv run pytest tests/test_parser.py -q` | `test_parser.py` |
+| Adaptive content-driven classification + `profile_estate` + binary detection | `uv run pytest tests/test_scanner_adaptive.py tests/test_scanner_binary.py -q` | `test_scanner_*.py` |
+| Knowledge graph: blast radius, PageRank, Louvain communities | `uv run pytest tests/test_graphx.py -q` | `test_graphx.py` |
+| Field-level data lineage (SQL host-var ↔ column) | part of `test_parser.py` + `GET /api/program/STMTDRV/lineage` | `test_parser.py` |
+| Business-rule extraction | `uv run pytest tests/test_rules.py -q` | `test_rules.py` |
+| Online layer: CICS + CSD transaction→program | `uv run pytest tests/test_cics.py tests/test_csd.py -q` | `test_cics.py`, `test_csd.py` |
+| Runtime-evidence correlation | `uv run pytest tests/test_runtime.py -q` | `test_runtime.py` |
+| Global search | `uv run pytest tests/test_search.py -q` | `test_search.py` |
+| Export (JSON/CSV/GraphML) + Mermaid sequence diagrams | `uv run pytest tests/test_export.py tests/test_sequence.py -q` | `test_export.py`, `test_sequence.py` |
+| Advanced ANTLR COBOL-85 backend (parity + COPY/REPLACING) | `MIP_PARSER=advanced uv run pytest tests/test_antlr_backend.py tests/test_groundtruth.py -q` | `test_antlr_backend.py` |
+| Parallel parsing == serial (180K-scale) | `uv run pytest tests/test_parallel.py -q` | `test_parallel.py` |
+| Scan/insert performance | `uv run pytest tests/test_perf.py -q` ; `uv run python scripts/benchmark_scan.py` | `test_perf.py` |
+
+Smoke-test the API surface (25 endpoints) without the UI:
+```bash
+uv run python - <<'PY'
+from fastapi.testclient import TestClient; from mip.api import app
+c = TestClient(app); c.post("/api/scan")
+print("health   :", c.get("/api/health").json()["parser"])
+print("summary  :", c.get("/api/summary").json())
+print("rules    :", [r["kind"] for r in c.get("/api/program/CRDVAL/rules").json()["rules"]])
+print("impact   :", sorted(x["id"] for x in c.get("/api/program/CARD_MASTER/impact").json()["impacted"]))
+print("sequence :", c.get("/api/program/AUTHTRAN/sequence").json()["participants"])
+print("search   :", [(x["kind"],x["id"]) for x in c.get("/api/search?q=AUTH").json()["results"]])
+print("runtime  :", c.get("/api/runtime").json().get("reconciliation",{}).get("summary"))
+PY
+```
+
+## 6. Try it on a real / larger estate
+
+```bash
+# drop real COBOL/JCL/copybooks/CSD into source_mf_code/  (extensions optional), then:
+uv run mip scan ../source_mf_code
+# or a public corpus:
+git clone -b experimentation https://github.com/hpatel-appliedai/aws-mainframe-modernization-carddemo
+MIP_WORKERS=8 uv run mip scan aws-mainframe-modernization-carddemo
+# inspect the learned folder map (no hardcoded folder names):
+uv run python -c "import json; from mip import scanner; print(json.dumps(scanner.profile_estate('../source_mf_code'), indent=2))"
+```
+Scale notes: scanning reads only a 64 KB header per file and skips binaries fast; inserts
+are bulk/transactional; parsing fans out across cores (`MIP_WORKERS`); classification is
+learned per-folder so new/renamed folders need no code change. See
+[`00-foundation/ARCHITECTURE.md`](00-foundation/ARCHITECTURE.md) for the honest scale plan
+(NetworkX/SQLite limits + the trigger/target to move to a graph DB).
+
+---
+
+## 7. How skills and agents were used
+
+MIP uses "agents and skills" in **two distinct senses** — the platform's own skill/agent
+assets, and the Claude Code agents that *built* it. Both are captured here.
+
+### 7a. MIP skills (the platform's personas/charters)
+`03-skills/` holds **12 skills** written to the **Agent Skills standard**
+([agentskills.io](https://agentskills.io/specification)) — each is a folder with a
+`SKILL.md` (`name` + `description` frontmatter). They define *who does what* and the rules
+every contributor (human or AI) follows; the prompts in `04-prompts/` invoke them, and the
+engine implements them.
+
+- **[`skills.catalog.json`](03-skills/skills.catalog.json)** is the registry mapping each
+  skill → the prompts that invoke it → the tools/code that implement it, plus a `status`
+  (`implemented` / `partial` / `specified`). Run **`python 03-skills/validate_catalog.py`**
+  to confirm folders ⇄ catalog stay 1:1 (CI enforces this).
+- Skill → code, e.g.: `mainframe-code-analyst` → scanner/`cobol_ast`; `graph-engineer` →
+  `graphx` (blast radius, PageRank, Louvain); `metadata-modeler`/`sqlite-engineer` →
+  `models.py`/`schema.sql`/`store.py`; `business-capability-analyst` → `queries.capabilities`;
+  `resilience-engineer` → dead-code/runtime; `test-engineer` → the test suite.
+- All inherit [`03-skills/MIP_ENGINEERING_PRINCIPLES.md`](03-skills/MIP_ENGINEERING_PRINCIPLES.md)
+  (evidence + confidence, graceful degradation, explainability). `03-skills/modernization-leverage/`
+  adds common community roles (incl. the Karpathy engineering guidelines that shape `CLAUDE.md`).
+
+### 7b. Project agents (Claude Code, ship with the repo)
+[`.claude/agents/`](.claude/agents/) defines two subagents available to anyone using Claude
+Code in this repo (also mirrored into `.claude/skills/` so Claude Code auto-discovers the
+12 skills):
+- **`mip-discovery`** — runs the engine to inventory/graph/root/dead-code/capability-map an
+  estate and explain findings with evidence + confidence.
+- **`mip-modernization-architect`** — turns that evidence into an incremental, low-risk
+  modernization plan (extract lowest-blast-radius capability first), citing the evidence.
+
+### 7c. How agents built this platform (multi-agent orchestration)
+The implementation was produced by **fanning out parallel Claude Code subagents with
+strictly disjoint file ownership** so they never clobber each other, then integrating +
+verifying centrally. Representative waves:
+- **Feature pairs in parallel** — e.g. business-rule extraction (backend) ‖ router+search
+  (frontend); ANTLR backend ‖ runtime-evidence correlation; scan-performance ‖
+  binary-artifact classification. Each agent owned a non-overlapping set of files and was
+  given the exact API contracts so the halves lined up on first integration.
+- **Adversarial code review** — a dedicated review subagent audited new parser/graph code
+  and found 4 real correctness/honesty bugs (fabricated lineage edges, a false dead-code
+  case); all were fixed with regression tests before shipping.
+- **Documentation** — a subagent generated the [`docs/showcase/`](docs/showcase/) management
+  pack from **real** captured engine/API output (no invented numbers).
+- **Guardrails** — every agent was held to: don't fabricate, keep the default parser the
+  verified reference, keep the suite green, and commit only verified work. Recovered
+  partial work (e.g. parallel-parsing) was finished and re-verified in the main thread.
+
+---
+
+## 8. Repository map
 
 | Path | What's there |
 |------|--------------|
-| [`CLAUDE.md`](CLAUDE.md) | working rules for any agent/engineer in this repo (adapted Karpathy guidelines) — makes the repo self-instructing on any machine |
-| [`ASSESSMENT.md`](ASSESSMENT.md) | the 3 assessments of the original repo (why this folder exists) |
-| [`00-foundation/`](00-foundation/) | [PHILOSOPHY](00-foundation/PHILOSOPHY.md) · [ENGINEERING_PRINCIPLES](00-foundation/ENGINEERING_PRINCIPLES.md) · [ARCHITECTURE](00-foundation/ARCHITECTURE.md) (incl. honest scale plan) |
-| [`01-metadata-model/`](01-metadata-model/) | canonical [ENTITIES](01-metadata-model/ENTITIES.md) · [RELATIONSHIPS](01-metadata-model/RELATIONSHIPS.md) · `models.py` (Pydantic) · `schema.sql` (SQLite) |
-| [`02-algorithms/`](02-algorithms/) | [CORE_ALGORITHMS](02-algorithms/CORE_ALGORITHMS.md) — root, impact/blast-radius, lineage, clustering, confidence aggregation (pseudocode) |
-| [`03-skills/`](03-skills/) | the **12 canonical skills** + [MIP_ENGINEERING_PRINCIPLES](03-skills/MIP_ENGINEERING_PRINCIPLES.md) + [modernization-leverage](03-skills/modernization-leverage/SKILLS.md) |
-| [`04-prompts/`](04-prompts/) | the **canonical V2 prompt library** (27 prompts) + [community modernization prompts](04-prompts/community/COMMON_MODERNIZATION_PROMPTS.md) |
-| [`05-build-plan/`](05-build-plan/) | [V0.1_VERTICAL_SLICE](05-build-plan/V0.1_VERTICAL_SLICE.md) |
-| [`reference-implementation/`](reference-implementation/) | **runnable** v0.1 engine (Python 3.13) + `sample_estate/` + tests |
-| [`app/`](app/) | **React UI + FastAPI API** ([USER_MANUAL](app/USER_MANUAL.md)) over the engine |
-| [`source_mf_code/`](source_mf_code/) | the mainframe estate MIP analyzes (drop real code here) |
+| [`CLAUDE.md`](CLAUDE.md) | self-instructing working rules (adapted Karpathy guidelines) |
+| [`ASSESSMENT.md`](ASSESSMENT.md) | the three assessments of the original repo |
+| [`00-foundation/`](00-foundation/) | philosophy · engineering principles · architecture (+ scale plan) |
+| [`01-metadata-model/`](01-metadata-model/) | entities · relationships · `models.py` · `schema.sql` |
+| [`02-algorithms/`](02-algorithms/) | root / impact / lineage / clustering / confidence pseudocode |
+| [`03-skills/`](03-skills/) | 12 skills + `skills.catalog.json` + `validate_catalog.py` + principles |
+| [`04-prompts/`](04-prompts/) | V2 prompt library + community modernization prompts |
+| [`05-build-plan/`](05-build-plan/) | the v0.1 vertical-slice plan |
+| [`reference-implementation/`](reference-implementation/) | the engine, `sample_estate/`, tests, `scripts/`, `ADVANCED_PARSER.md` |
+| [`app/`](app/) | React UI + FastAPI API, `USER_MANUAL.md`, `UX_SHOWCASE.md` |
+| [`docs/`](docs/) | `MAINFRAME_ARTIFACTS.md` (binary/IMS/MQ taxonomy) + `showcase/` |
+| [`source_mf_code/`](source_mf_code/) | the estate MIP analyzes |
 | [`.claude/`](.claude/) · [`.github/`](.github/) | project skills/agents/settings · CI |
 
-## What's proven today (the runnable spine)
-
-```bash
-cd reference-implementation
-uv venv --python 3.13 && uv pip install -e ".[dev]"
-uv run mip scan sample_estate                  # 20 extension-less members → SQLite
-uv run mip query "which jobs execute CRDPOST"  # → DAILYCRD
-uv run pytest -q                               # ground-truth precision/recall = 1.0  (5/5)
-```
-
-- **Content-based classification** of extension-less PDS-style members (as real
-  mainframe source is).
-- **Root/driver detection**, call graph, copybook & DB2 usage, **dead-code** detection.
-- **Resilience proven, not claimed:** the dynamic `CALL WS-VAR` is kept and flagged
-  `needs_review` (conf 0.3), never dropped or asserted — and a test enforces it.
-
-See [`reference-implementation/README.md`](reference-implementation/README.md) for the
-full run guide (incl. running it against the public AWS CardDemo estate) and the honest
-v0.1 limits.
-
-## What makes this the "better version"
-
-1. **Single source of truth** — no more skills/prompts duplicated in 4+ places.
-2. **It runs and measures itself** — design caught up to vision; the spine is tested.
-3. **Resilience baked in** — the evidence envelope (source · method · confidence ·
-   validation_status · timestamp) is in the model, the schema, and the code.
-4. **Honest about scale and limits** — real numbers + a named trigger/target for graph
-   scaling; v0.1 limits documented, not hidden.
-5. **Portable** — stdlib-only runtime; runs on any machine with Python 3.13+, no
-   network. `git clone` and go.
-
-## Where it goes next
-
-Graph algorithms on NetworkX (blast radius, clustering) → real COBOL grammar/AST →
-field-level lineage → capability detection → LLM Q&A — each **incremental on a spine
-that already works**, in the layer order above. The modernization prompts/skills
-([`04-prompts/community`](04-prompts/community/COMMON_MODERNIZATION_PROMPTS.md),
-[`03-skills/modernization-leverage`](03-skills/modernization-leverage/SKILLS.md)) plug in
-at the Copilot/Modernization layer once the graph exists.
+## 9. Honest limits & where it goes next
+v0.1 default parser is a focused grammar (the `advanced` ANTLR backend adds full COBOL-85
+coverage + `COPY REPLACING`); inferred outputs (capabilities, communities, business-rule
+meaning, resolved dynamic calls) are confidence-scored and flagged for review. Remaining
+roadmap tier: **IMS/MQ extraction**, a **graph-DB/scale backend**, and **multi-tenant**
+(see [`COMPARISON_AND_ROADMAP.md`](COMPARISON_AND_ROADMAP.md)).
