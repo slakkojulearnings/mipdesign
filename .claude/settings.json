@@ -20,7 +20,10 @@
       "Bash(pip show *)",
       "Bash(echo \"---EXIT:$?---\")",
       "Read(//c/Users/srika/**)",
-      "Bash(ls -la /c/*.jar)"
+      "Bash(ls -la /c/*.jar)",
+      "Read(//f/f/mip/mip_structure/reference-implementation/**)",
+      "Read(//f/f/mip/mip_structure/reference-implementation/src/**)",
+      "Bash(MIP_PARSER=advanced uv run pytest tests/test_groundtruth.py tests/test_parser.py tests/test_antlr_backend.py -q)"
     ]
   }
 }
