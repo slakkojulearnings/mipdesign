@@ -1,0 +1,64 @@
+/* Programs.jsx — search, sort, facet filters.
+   Only NEW styles live here; reuse global .btn/.badge/.pill/.tag/.chip. */
+
+.prog-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.prog-search {
+  position: relative;
+  flex: 1;
+  min-width: 220px;
+  max-width: 420px;
+}
+.prog-search input {
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  padding: 9px 34px 9px 14px;
+  border-radius: 980px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.prog-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(0,113,227,.12); }
+.prog-search .clear {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 16px; line-height: 1; padding: 2px 4px;
+}
+.prog-search .clear:hover { color: var(--text); }
+
+/* facet toggle chips — built on the global .chip pill look */
+.prog-facets { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; }
+.facet-chip {
+  background: #fff; border: 1px solid var(--border-strong); border-radius: 980px;
+  padding: 7px 14px; font-size: 13px; cursor: pointer; color: var(--text);
+  transition: all .15s ease;
+}
+.facet-chip:hover { border-color: var(--accent); color: var(--accent); }
+.facet-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.facet-chip.on:hover { color: #fff; }
+
+.prog-lang {
+  background: #fff; border: 1px solid var(--border-strong); color: var(--text);
+  padding: 7px 12px; border-radius: 980px; font-size: 13px; cursor: pointer; outline: none;
+}
+.prog-lang:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(0,113,227,.12); }
+
+.prog-count { color: var(--muted); font-size: 13px; margin-left: auto; white-space: nowrap; }
+
+/* sortable headers */
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--text); }
+th.sortable .arrow { margin-left: 5px; font-size: 10px; opacity: .9; }
+th.sortable.active { color: var(--accent); }
+
+.prog-empty {
+  background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 40px 24px; text-align: center; color: var(--muted); font-size: 14.5px;
+}

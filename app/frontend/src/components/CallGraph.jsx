@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import { useData } from "../hooks.js";
 import ProfileCard from "./ProfileCard.jsx";
 import Structure from "./Structure.jsx";
+import "./CallGraph.css";
 
 // Layered left→right layout: entry nodes (no incoming) on the left, BFS depth as columns.
 function layout(nodes, edges) {
@@ -38,6 +39,12 @@ function layout(nodes, edges) {
 const colorOf = (n) =>
   n.type === "job" ? "var(--accent)" : n.is_dead ? "var(--red)" : n.is_root ? "var(--green)" : "var(--purple)";
 
+// Non-color status cue: a small glyph so root/dead/dynamic are distinguishable without color.
+const glyphOf = (n) =>
+  n.type === "job" ? "▸" : n.is_dynamic ? "?" : n.is_dead ? "✕" : n.is_root ? "R" : "";
+
+const ZMIN = 0.25, ZMAX = 4;
+
 function Insight({ l, v, cls }) {
   return <div className={`insight ${cls || ""}`}><div className="l">{l}</div><div className="v">{v}</div></div>;
 }
@@ -47,6 +54,42 @@ export default function CallGraph({ onOpenProgram }) {
   const [sel, setSel] = useState(null);        // {type:'node'|'edge', ...}
   const [profile, setProfile] = useState(null);
   const lay = useMemo(() => (data ? layout(data.nodes, data.edges) : null), [data]);
+
+  // --- controls state ---
+  const [view, setView] = useState(null);      // viewBox {x,y,w,h}
+  const [find, setFind] = useState("");
+  const [hitId, setHitId] = useState(null);    // search-focused node id
+  const [findMiss, setFindMiss] = useState(false);
+  const [threshold, setThreshold] = useState(0);
+  const [enabledTypes, setEnabledTypes] = useState(null); // {CALLS:true,...} or null=all
+
+  const svgRef = useRef(null);
+  const drag = useRef(null);   // {x,y, vx,vy} active pan
+  const moved = useRef(false); // suppress click after a pan-drag
+
+  // rel types present in the data
+  const relTypes = useMemo(() => {
+    const s = new Set();
+    (data?.edges || []).forEach((e) => e.rel_type && s.add(e.rel_type));
+    return Array.from(s).sort();
+  }, [data]);
+
+  // nodes whose only inbound evidence is non-confirmed → "dynamic / unresolved" cue
+  const dynamicSet = useMemo(() => {
+    const confirmed = new Set(), seen = new Set();
+    (data?.edges || []).forEach((e) => {
+      seen.add(e.target);
+      if (e.validation_status === "confirmed") confirmed.add(e.target);
+    });
+    const s = new Set();
+    seen.forEach((t) => { if (!confirmed.has(t)) s.add(t); });
+    return s;
+  }, [data]);
+
+  // initialize viewBox once the layout is known
+  useEffect(() => {
+    if (lay) setView({ x: 0, y: 0, w: Math.max(lay.width, 400), h: Math.max(lay.height, 200) });
+  }, [lay]);
 
   useEffect(() => {
     if (sel?.type === "node" && sel.node.type === "program") {
@@ -59,8 +102,91 @@ export default function CallGraph({ onOpenProgram }) {
   if (err) return <div className="error">{err}</div>;
 
   const { pos, width, height } = lay;
+  const baseW = Math.max(width, 400), baseH = Math.max(height, 200);
+  const vb = view || { x: 0, y: 0, w: baseW, h: baseH };
   const ins = data.insights || {};
   const NW = 130, NH = 28;
+
+  const typeOn = (t) => !enabledTypes || enabledTypes[t];
+
+  // visible edges = type enabled AND confidence at/above threshold
+  let hiddenByConf = 0;
+  const visibleEdges = data.edges
+    .map((e, i) => ({ e, i }))
+    .filter(({ e }) => {
+      if (!typeOn(e.rel_type)) return false;
+      const c = e.confidence == null ? 1 : e.confidence;
+      if (c < threshold) { hiddenByConf++; return false; }
+      return true;
+    });
+
+  // --- zoom / pan helpers ---
+  const clientToSvg = (clientX, clientY) => {
+    const r = svgRef.current.getBoundingClientRect();
+    return {
+      x: vb.x + ((clientX - r.left) / r.width) * vb.w,
+      y: vb.y + ((clientY - r.top) / r.height) * vb.h,
+    };
+  };
+  const zoomBy = (factor, cx, cy) => {
+    setView((v) => {
+      const cur = v || { x: 0, y: 0, w: baseW, h: baseH };
+      const nw = Math.min(baseW / ZMIN, Math.max(baseW / ZMAX, cur.w * factor));
+      const nh = nw * (baseH / baseW);
+      // keep the point under the cursor stable
+      const ax = cx == null ? cur.x + cur.w / 2 : cx;
+      const ay = cy == null ? cur.y + cur.h / 2 : cy;
+      const rx = (ax - cur.x) / cur.w, ry = (ay - cur.y) / cur.h;
+      return { x: ax - rx * nw, y: ay - ry * nh, w: nw, h: nh };
+    });
+  };
+  const onWheel = (ev) => {
+    ev.preventDefault();
+    const p = clientToSvg(ev.clientX, ev.clientY);
+    zoomBy(ev.deltaY > 0 ? 1.12 : 1 / 1.12, p.x, p.y);
+  };
+  const onPointerDown = (ev) => {
+    if (ev.button !== 0) return;
+    moved.current = false;
+    drag.current = { x: ev.clientX, y: ev.clientY, vx: vb.x, vy: vb.y };
+    svgRef.current.setPointerCapture?.(ev.pointerId);
+  };
+  const onPointerMove = (ev) => {
+    if (!drag.current) return;
+    const r = svgRef.current.getBoundingClientRect();
+    const dx = ((ev.clientX - drag.current.x) / r.width) * vb.w;
+    const dy = ((ev.clientY - drag.current.y) / r.height) * vb.h;
+    if (Math.abs(ev.clientX - drag.current.x) + Math.abs(ev.clientY - drag.current.y) > 4) moved.current = true;
+    setView((v) => ({ ...(v || vb), x: drag.current.vx - dx, y: drag.current.vy - dy }));
+  };
+  const endPan = (ev) => {
+    if (drag.current) svgRef.current.releasePointerCapture?.(ev.pointerId);
+    drag.current = null;
+  };
+  const reset = () => setView({ x: 0, y: 0, w: baseW, h: baseH });
+
+  // center the viewBox on a node and highlight it
+  const focusNode = (id) => {
+    const p = pos[id];
+    if (!p) return;
+    setView((v) => {
+      const cur = v || vb;
+      const cx = p.x + NW / 2, cy = p.y + NH / 2;
+      return { x: cx - cur.w / 2, y: cy - cur.h / 2, w: cur.w, h: cur.h };
+    });
+    setHitId(id);
+  };
+
+  const runFind = () => {
+    const q = find.trim().toLowerCase();
+    if (!q) { setHitId(null); setFindMiss(false); return; }
+    const match = data.nodes.find((n) => n.id.toLowerCase() === q)
+      || data.nodes.find((n) => n.id.toLowerCase().includes(q));
+    if (match) { focusNode(match.id); setFindMiss(false); }
+    else { setHitId(null); setFindMiss(true); }
+  };
+
+  const activateNode = (n) => setSel({ type: "node", node: n });
 
   return (
     <div>
@@ -77,16 +203,84 @@ export default function CallGraph({ onOpenProgram }) {
       </div>
 
       <div className="legend">
-        <span><i className="dot" style={{ background: "var(--accent)" }} /> Job</span>
-        <span><i className="dot" style={{ background: "var(--green)" }} /> Root</span>
+        <span><i className="dot" style={{ background: "var(--accent)" }} /> ▸ Job</span>
+        <span><i className="dot" style={{ background: "var(--green)" }} /> R Root</span>
         <span><i className="dot" style={{ background: "var(--purple)" }} /> Program</span>
-        <span><i className="dot" style={{ background: "var(--red)" }} /> Dead</span>
-        <span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--amber)" strokeWidth="2" strokeDasharray="4 3" /></svg> dynamic</span>
+        <span><i className="dot" style={{ background: "var(--red)" }} /> ✕ Dead</span>
+        <span><i className="dot" style={{ background: "var(--amber)" }} /> ? Dynamic / unresolved</span>
+        <span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--amber)" strokeWidth="2" strokeDasharray="4 3" /></svg> needs-review edge</span>
+      </div>
+
+      <div className="cg-toolbar">
+        <div className="cg-group">
+          <span className="cg-label">Zoom</span>
+          <button className="cg-zoombtn" onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom in">+</button>
+          <button className="cg-zoombtn" onClick={() => zoomBy(1.2)} aria-label="Zoom out">−</button>
+          <button className="cg-zoombtn wide" onClick={reset} aria-label="Reset view">Reset</button>
+        </div>
+
+        <div className="cg-group cg-find">
+          <span className="cg-label">Find</span>
+          <input
+            type="text"
+            placeholder="node id…"
+            value={find}
+            onChange={(e) => { setFind(e.target.value); setFindMiss(false); }}
+            onKeyDown={(e) => { if (e.key === "Enter") runFind(); }}
+            aria-label="Find a node by id"
+          />
+          <button className="cg-zoombtn wide" onClick={runFind}>Go</button>
+          {findMiss && <span className="miss">no match</span>}
+        </div>
+
+        <div className="cg-group cg-thresh">
+          <span className="cg-label">Min confidence</span>
+          <input
+            type="range" min="0" max="1" step="0.05"
+            value={threshold}
+            onChange={(e) => setThreshold(parseFloat(e.target.value))}
+            aria-label="Minimum edge confidence"
+          />
+          <span className="val">{threshold.toFixed(2)}</span>
+          {hiddenByConf > 0 && <span className="cg-hidden">{hiddenByConf} edge{hiddenByConf === 1 ? "" : "s"} hidden</span>}
+        </div>
+
+        {relTypes.length > 0 && (
+          <div className="cg-group cg-types">
+            <span className="cg-label">Edges</span>
+            {relTypes.map((t) => (
+              <label key={t}>
+                <input
+                  type="checkbox"
+                  checked={typeOn(t)}
+                  onChange={(e) =>
+                    setEnabledTypes((cur) => {
+                      const base = cur || Object.fromEntries(relTypes.map((x) => [x, true]));
+                      return { ...base, [t]: e.target.checked };
+                    })
+                  }
+                />
+                {t}
+              </label>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="graph-layout">
         <div className="graph-wrap">
-          <svg width={Math.max(width, 400)} height={Math.max(height, 200)}>
+          <svg
+            ref={svgRef}
+            className={`cg-svg${drag.current ? " panning" : ""}`}
+            width="100%"
+            height={baseH}
+            viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+            onWheel={onWheel}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endPan}
+            onPointerLeave={endPan}
+          >
             <defs>
               <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
                 <path d="M0,0 L7,3 L0,6 Z" fill="#5b6b7d" /></marker>
@@ -94,7 +288,7 @@ export default function CallGraph({ onOpenProgram }) {
                 <path d="M0,0 L7,3 L0,6 Z" fill="var(--amber)" /></marker>
             </defs>
 
-            {data.edges.map((e, i) => {
+            {visibleEdges.map(({ e, i }) => {
               const a = pos[e.source], b = pos[e.target];
               if (!a || !b) return null;
               const review = e.validation_status !== "confirmed";
@@ -104,21 +298,40 @@ export default function CallGraph({ onOpenProgram }) {
                   stroke={on ? "var(--text)" : review ? "var(--amber)" : "#5b6b7d"}
                   strokeWidth={on ? 3 : 1.6} strokeDasharray={review ? "4 3" : "0"}
                   markerEnd={review ? "url(#arrow-rev)" : "url(#arrow)"}
-                  style={{ cursor: "pointer" }} onClick={() => setSel({ type: "edge", edge: e, i })} />
+                  style={{ cursor: "pointer" }}
+                  onClick={() => { if (!moved.current) setSel({ type: "edge", edge: e, i }); }} />
               );
             })}
 
             {data.nodes.map((n) => {
               const p = pos[n.id]; if (!p) return null;
+              const nn = { ...n, is_dynamic: dynamicSet.has(n.id) };
               const on = sel?.type === "node" && sel.node.id === n.id;
+              const glyph = glyphOf(nn);
+              const aria = `${n.type} ${n.id}` +
+                (n.is_root ? ", root" : "") + (n.is_dead ? ", dead" : "") +
+                (nn.is_dynamic ? ", dynamic or unresolved" : "");
               return (
-                <g key={n.id} transform={`translate(${p.x},${p.y})`} style={{ cursor: "pointer" }}
-                   onClick={() => setSel({ type: "node", node: n })}>
-                  <rect width={NW} height={NH} rx="7" fill={on ? "var(--panel)" : "var(--panel-2)"}
-                        stroke={colorOf(n)} strokeWidth={on ? 3 : 2} />
-                  <circle cx="11" cy={NH / 2} r="4" fill={colorOf(n)} />
+                <g key={n.id} className={`cg-node${hitId === n.id ? " cg-hit" : ""}`}
+                   transform={`translate(${p.x},${p.y})`}
+                   tabIndex={0} role="button" aria-label={aria}
+                   onClick={() => { if (!moved.current) activateNode(nn); }}
+                   onKeyDown={(ev) => {
+                     if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); activateNode(nn); }
+                   }}>
+                  <rect className="cg-focus-ring" x="-3" y="-3" width={NW + 6} height={NH + 6} rx="9"
+                        fill="none" stroke="var(--accent)" strokeWidth="2" />
+                  <rect className="cg-node-rect" width={NW} height={NH} rx="7"
+                        fill={on ? "var(--panel)" : "var(--panel-2)"}
+                        stroke={colorOf(nn)} strokeWidth={on ? 3 : 2} />
+                  <circle cx="11" cy={NH / 2} r="4" fill={colorOf(nn)} />
                   <text x="22" y={NH / 2 + 4} fill="var(--text)" fontSize="11.5"
                         fontFamily="ui-monospace, Consolas, monospace">{n.id}</text>
+                  {glyph && (
+                    <text x={NW - 11} y={NH / 2 + 4} textAnchor="middle" fontSize="11"
+                          fontWeight="700" fill={colorOf(nn)}
+                          fontFamily="ui-monospace, Consolas, monospace">{glyph}</text>
+                  )}
                 </g>
               );
             })}
@@ -154,6 +367,7 @@ export default function CallGraph({ onOpenProgram }) {
                 <span className="tag">{sel.node.type}</span>{" "}
                 {sel.node.is_root && <span className="badge root">root</span>}{" "}
                 {sel.node.is_dead && <span className="badge dead">dead</span>}{" "}
+                {sel.node.is_dynamic && <span className="badge review">dynamic</span>}{" "}
                 {sel.node.community != null && <span className="badge ok">community {sel.node.community}</span>}
               </div>
               {sel.node.type === "program" ? (

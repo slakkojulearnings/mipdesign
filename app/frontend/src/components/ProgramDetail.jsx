@@ -3,9 +3,61 @@ import { api } from "../api.js";
 import { useData } from "../hooks.js";
 import ProfileCard from "./ProfileCard.jsx";
 import Structure from "./Structure.jsx";
+import SequenceDiagram from "./SequenceDiagram.jsx";
+import LineageDiagram from "./LineageDiagram.jsx";
 
 function Insight({ l, v, cls }) {
   return <div className={`insight ${cls || ""}`}><div className="l">{l}</div><div className="v">{v}</div></div>;
+}
+
+// "path:line" -> { path, line }. The backend addresses source by relative path,
+// so we split on the LAST colon (Windows drive colons never appear here).
+function splitEvidence(ev) {
+  if (!ev) return null;
+  const m = /^(.*):(\d+)$/.exec(ev);
+  return m ? { path: m[1], line: Number(m[2]) } : { path: ev, line: null };
+}
+
+// Clickable "file:line" tag that opens the member source in a modal near the line.
+function EvidenceTag({ evidence, onOpen }) {
+  if (!evidence) return null;
+  return (
+    <span className="tag evidence-link" title="View source evidence"
+          onClick={() => onOpen(evidence)}>{evidence}</span>
+  );
+}
+
+// Best-effort source viewer modal: loads the member and highlights the cited line.
+function EvidenceModal({ evidence, onClose }) {
+  const loc = splitEvidence(evidence);
+  const { data, err, loading } = useData(() => api.source(loc.path), [evidence]);
+  const lines = data ? data.text.split("\n") : [];
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <h3>{loc.path}{loc.line ? `:${loc.line}` : ""}</h3>
+          <button className="btn secondary" onClick={onClose}>Close</button>
+        </div>
+        {loading && <div className="loading">Loading source…</div>}
+        {err && <div className="error">{err}</div>}
+        {data && (
+          <pre className="code modal-src">
+            {lines.map((ln, i) => {
+              const n = i + 1;
+              const hit = loc.line === n;
+              return (
+                <div key={n} ref={hit ? (el) => el && el.scrollIntoView({ block: "center" }) : null}
+                     className={hit ? "src-line hit" : "src-line"}>
+                  <span className="src-ln">{n}</span>{ln}
+                </div>
+              );
+            })}
+          </pre>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function ProgramDetail({ pid, onOpenProgram, back }) {
@@ -17,6 +69,9 @@ export default function ProgramDetail({ pid, onOpenProgram, back }) {
   const [lineage, setLineage] = useState(null);
   const [rules, setRules] = useState(null);
   const [rulesErr, setRulesErr] = useState(null);
+  const [seq, setSeq] = useState(null);
+  const [seqErr, setSeqErr] = useState(null);
+  const [evidence, setEvidence] = useState(null);   // "path:line" currently open in modal
 
   if (loading) return <div className="loading">Loading…</div>;
   if (err) return <div className="error">{err}</div>;
@@ -45,6 +100,12 @@ export default function ProgramDetail({ pid, onOpenProgram, back }) {
     setRulesErr(null);
     try { setRules(await api.rules(pid)); }
     catch (e) { setRulesErr(String(e)); }
+  };
+
+  const runSequence = async () => {
+    setSeqErr(null);
+    try { setSeq(await api.sequence(pid)); }
+    catch (e) { setSeqErr(String(e)); }
   };
 
   return (
@@ -109,19 +170,41 @@ export default function ProgramDetail({ pid, onOpenProgram, back }) {
       </div>
 
       <div className="panel">
+        <h3>Sequence diagram
+          <button className="btn secondary" style={{ marginLeft: 8 }} onClick={runSequence}>Render</button>
+          <span className="tag" style={{ marginLeft: 8 }}>call/exec interactions for this program</span>
+        </h3>
+        {seqErr && <div className="error">{seqErr}</div>}
+        {!seq && !seqErr && <div className="muted">Click “Render” to draw this program's interactions.</div>}
+        {seq && (seq.mermaid
+          ? <SequenceDiagram code={seq.mermaid} />
+          : <div className="muted">No interactions to diagram.</div>)}
+      </div>
+
+      <div className="panel">
         <h3>Field-level data lineage
           <button className="btn secondary" style={{ marginLeft: 8 }} onClick={runLineage}>Trace</button>
           <span className="tag" style={{ marginLeft: 8 }}>grammar parser — MOVE + SQL host-var ↔ column</span>
         </h3>
+        {lineage && lineage.error && <div className="error">{lineage.error}</div>}
         {!lineage && <div className="muted">Click “Trace” to follow data into and out of this program's fields.</div>}
-        {lineage && (lineage.flows.length === 0
-          ? <div className="muted">No field-level flows detected (no MOVE/SQL data movement parsed).</div>
-          : lineage.flows.map((f, i) => (
-              <div key={i} className="rel" style={{ padding: "2px 0" }}>
-                <span>{f.src}</span> <span className="t">→</span> <span>{f.dst}</span>{" "}
-                <span className="badge ok">{f.kind}</span> <span className="tag">{f.evidence}</span>
-              </div>
-            )))}
+        {lineage && lineage.flows.length === 0 && !lineage.error
+          && <div className="muted">No field-level flows detected (no MOVE/SQL data movement parsed).</div>}
+        {lineage && lineage.flows.length > 0 && (
+          <>
+            <LineageDiagram flows={lineage.flows} />
+            <div className="cap-sec" style={{ marginTop: 12 }}>
+              <div className="l">Flows (text)</div>
+              {lineage.flows.map((f, i) => (
+                <div key={i} className="rel" style={{ padding: "2px 0" }}>
+                  <span>{f.src}</span> <span className="t">→</span> <span>{f.dst}</span>{" "}
+                  <span className="badge ok">{f.kind}</span>{" "}
+                  <EvidenceTag evidence={f.evidence} onOpen={setEvidence} />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="panel">
@@ -152,7 +235,7 @@ export default function ProgramDetail({ pid, onOpenProgram, back }) {
                       {(r.tables || []).map((t) => <span key={"t" + t} className="pill tbl">{t}</span>)}
                     </div>
                   ) : null}
-                  {r.source_evidence && <span className="tag">{r.source_evidence}</span>}
+                  {r.source_evidence && <EvidenceTag evidence={r.source_evidence} onOpen={setEvidence} />}
                 </div>
               );
             }))}
@@ -167,6 +250,8 @@ export default function ProgramDetail({ pid, onOpenProgram, back }) {
           {!src && !srcErr && <div className="muted">Click “View” to load the member source.</div>}
         </div>
       )}
+
+      {evidence && <EvidenceModal evidence={evidence} onClose={() => setEvidence(null)} />}
     </div>
   );
 }

@@ -14,9 +14,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import cobol, graphx, parser_backend, qlog, queries, store
+from . import cobol, export, graphx, parser_backend, qlog, queries, store
 from .pipeline import build_db
 
 _PKG_ROOT = Path(__file__).resolve().parents[2]          # reference-implementation/
@@ -298,6 +299,47 @@ def get_log(limit: int = Query(default=100)) -> list[dict]:
 @app.get("/api/log/raw")
 def get_log_raw() -> dict:
     return {"path": str(qlog.MD_PATH), "markdown": qlog.raw_md()}
+
+
+@app.get("/api/program/{pid}/sequence")
+def get_sequence(pid: str) -> dict:
+    """Mermaid sequence diagram of a program's interactions in source-line order."""
+    _ensure_scanned()
+    conn = _conn()
+    pid = pid.upper()
+    row = conn.execute(
+        "SELECT a.path AS src FROM program p JOIN artifact a ON a.artifact_id=p.artifact_id"
+        " WHERE p.program_id=?", (pid,)).fetchone()
+    conn.close()
+    if not row or not row["src"]:
+        return cobol.sequence("", pid)
+    target = _state["source"] / row["src"]
+    text = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else ""
+    return cobol.sequence(text, pid)
+
+
+@app.get("/api/export")
+def get_export(format: str = Query(...), kind: str = Query(default="programs")) -> Response:
+    """Downloadable export of the estate: graphml | json | csv (kind=programs|edges)."""
+    _ensure_scanned()
+    conn = _conn()
+    try:
+        if format == "graphml":
+            body, media, fname = export.graphml(conn), "application/xml", "mip-graph.graphml"
+        elif format == "json":
+            body, media, fname = export.json_bundle(conn), "application/json", "mip-export.json"
+        elif format == "csv":
+            if kind == "edges":
+                body, fname = export.csv_edges(conn), "mip-edges.csv"
+            else:
+                body, fname = export.csv_programs(conn), "mip-programs.csv"
+            media = "text/csv"
+        else:
+            raise HTTPException(400, f"unknown export format: {format}")
+    finally:
+        conn.close()
+    return Response(content=body, media_type=media,
+                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
 @app.get("/api/source")

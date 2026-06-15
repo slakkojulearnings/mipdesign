@@ -70,3 +70,49 @@ def business_rules(text: str, program: str, rel_path: str) -> list[dict]:
     plain-English rendering are interpretation (flagged `inferred`). See cobol_ast.
     """
     return cobol_ast.business_rules(text, program, rel_path)
+
+
+# CICS rel -> the conventional online interaction verb shown in the diagram.
+_CICS_VERB = {"CALLS": "LINK", "READS": "READS", "WRITES": "WRITES", "USES": "USES",
+              "STARTS": "STARTS"}
+
+
+def sequence(text: str, program: str) -> dict:
+    """Mermaid sequenceDiagram of a program's interactions, in SOURCE-LINE ORDER.
+
+    Merges the program's CALLs, embedded SQL, and EXEC CICS commands sorted by line and
+    renders each as a message from the program to its distinct target. With no
+    interactions, returns a minimal valid diagram declaring just the program participant.
+    """
+    u = parser_backend.parse(text)
+    pid = (program or u.program_id or "PROGRAM").upper()
+
+    events: list[tuple[int, str, str]] = []   # (line, target, label)
+    for c in u.calls:
+        target = c["target"].upper()
+        label = "CALL"
+        if c.get("validation") == "needs_review":
+            label += " (dynamic)"
+        elif c.get("kind") == "resolved":
+            label += " (resolved)"
+        events.append((c["line"], target, label))
+    for s in u.sql:
+        events.append((s["line"], s["table"].upper(), f"SQL {s['op']}"))
+    for cx in u.cics:
+        events.append((cx["line"], cx["target"].upper(),
+                       f"CICS {_CICS_VERB.get(cx['rel'], cx['rel'])}"))
+
+    events.sort(key=lambda e: e[0])
+
+    participants = [pid]
+    for _, target, _ in events:
+        if target not in participants:
+            participants.append(target)
+
+    lines = ["sequenceDiagram"]
+    for p in participants:
+        lines.append(f"    participant {p}")
+    for _, target, label in events:
+        lines.append(f"    {pid}->>{target}: {label}")
+
+    return {"program_id": pid, "participants": participants, "mermaid": "\n".join(lines)}

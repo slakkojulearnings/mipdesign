@@ -19,6 +19,8 @@ import CallGraph from "./components/CallGraph.jsx";
 import Capabilities from "./components/Capabilities.jsx";
 import QaLog from "./components/QaLog.jsx";
 import GlobalSearch from "./components/GlobalSearch.jsx";
+import ExportMenu from "./components/ExportMenu.jsx";
+import Toast from "./components/Toast.jsx";
 
 const NAV = [
   ["/", "Dashboard"],
@@ -85,15 +87,48 @@ function Layout() {
   const [health, setHealth] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
+  const [toasts, setToasts] = useState([]);
 
   useEffect(() => { api.health().then(setHealth).catch((e) => setError(String(e))); }, []);
 
+  const dismissToast = (id) => setToasts((ts) => ts.filter((t) => t.id !== id));
+  const pushToast = (t) => {
+    const id = Date.now() + Math.random();
+    setToasts((ts) => [...ts, { id, timeout: 4000, ...t }]);
+    return id;
+  };
+
+  // Summarize a scan response for the success toast (best-effort over its shape).
+  const scanSummary = (r) => {
+    const s = r && r.summary ? r.summary : r || {};
+    const parts = [];
+    if (s.programs != null) parts.push(`${s.programs} programs`);
+    if (s.jobs != null) parts.push(`${s.jobs} jobs`);
+    if (s.edges != null) parts.push(`${s.edges} relationships`);
+    return parts.length ? parts.join(" · ") : "Scan complete.";
+  };
+
   const rescan = async () => {
     setScanning(true); setError(null);
-    try { await api.scan(); window.dispatchEvent(new Event("mip-rescan")); }
-    catch (e) { setError(String(e)); }
-    finally { setScanning(false); }
+    const pending = pushToast({ title: "Scanning source…", message: "Re-parsing the estate.", timeout: 0 });
+    try {
+      const r = await api.scan();
+      window.dispatchEvent(new Event("mip-rescan"));
+      dismissToast(pending);
+      pushToast({ kind: "green", title: "Scan complete", message: scanSummary(r) });
+    } catch (e) {
+      dismissToast(pending);
+      setError(String(e));
+      pushToast({ kind: "red", title: "Scan failed", message: String(e), timeout: 6000 });
+    } finally {
+      setScanning(false);
+    }
   };
+
+  const onCopied = (ok) =>
+    pushToast(ok
+      ? { kind: "green", title: "Link copied", message: "Shareable URL is on your clipboard." }
+      : { kind: "red", title: "Copy failed", message: "Clipboard unavailable — copy from the address bar." });
 
   return (
     <div className="app">
@@ -116,6 +151,7 @@ function Layout() {
         <div className="topbar">
           <GlobalSearch />
           <div style={{ flex: 1 }} />
+          <ExportMenu onCopied={onCopied} />
           <button className="btn secondary" onClick={rescan} disabled={scanning}>
             {scanning ? "Scanning…" : "↻ Rescan source"}
           </button>
@@ -136,6 +172,7 @@ function Layout() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+      <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

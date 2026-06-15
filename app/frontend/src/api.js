@@ -13,6 +13,8 @@ export const api = {
   profile: (pid) => fetch(`/api/program/${encodeURIComponent(pid)}/profile`).then(j),
   impact: (pid) => fetch(`/api/program/${encodeURIComponent(pid)}/impact`).then(j),
   lineage: (pid) => fetch(`/api/program/${encodeURIComponent(pid)}/lineage`).then(j),
+  sequence: (pid) => fetch("/api/program/" + encodeURIComponent(pid) + "/sequence").then(j),
+  exportUrl: (format, kind) => `/api/export?format=${format}` + (kind ? `&kind=${kind}` : ""),
   jobs: () => fetch("/api/jobs").then(j),
   roots: () => fetch("/api/roots").then(j),
   deadcode: () => fetch("/api/deadcode").then(j),

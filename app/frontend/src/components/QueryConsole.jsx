@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import Trace from "./Trace.jsx";
 import ProfileCard from "./ProfileCard.jsx";
@@ -46,18 +47,34 @@ function Result({ kind, result, onOpenProgram }) {
 }
 
 export default function QueryConsole({ onOpenProgram }) {
-  const [q, setQ] = useState("which jobs execute CRDPOST");
+  const [params, setParams] = useSearchParams();
+  const initial = params.get("q") || "which jobs execute CRDPOST";
+  const [q, setQ] = useState(initial);
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  const run = async (question) => {
+  // Run a query and (optionally) push it into the URL so /query?q=... is shareable.
+  const run = async (question, share = true) => {
     const text = question ?? q;
+    if (share) setParams(text ? { q: text } : {}, { replace: true });
     setBusy(true); setErr(null);
     try { setRes(await api.query(text)); }
     catch (e) { setErr(String(e)); }
     finally { setBusy(false); }
   };
+
+  // Deep link: if the page is opened with ?q=..., prefill + run it once.
+  const ranInitial = useRef(false);
+  useEffect(() => {
+    const deep = params.get("q");
+    if (deep && !ranInitial.current) {
+      ranInitial.current = true;
+      setQ(deep);
+      run(deep, false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div>
