@@ -166,6 +166,26 @@ def get_lineage(pid: str) -> dict:
     return {"program_id": pid, "flows": cobol.field_lineage(text, pid, row["src"])}
 
 
+@app.get("/api/program/{pid}/rules")
+def get_rules(pid: str) -> dict:
+    """Business rules extracted from a program (IF / EVALUATE WHEN / COMPUTE).
+
+    Conditions are confirmed facts (real source line); kind + plain-English statement are
+    interpretation, flagged validation_status='inferred'."""
+    _ensure_scanned()
+    conn = _conn()
+    pid = pid.upper()
+    row = conn.execute(
+        "SELECT a.path AS src FROM program p JOIN artifact a ON a.artifact_id=p.artifact_id"
+        " WHERE p.program_id=?", (pid,)).fetchone()
+    conn.close()
+    if not row or not row["src"]:
+        return {"program_id": pid, "rules": []}
+    target = _state["source"] / row["src"]
+    text = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else ""
+    return {"program_id": pid, "rules": cobol.business_rules(text, pid, row["src"])}
+
+
 @app.get("/api/jobs")
 def get_jobs() -> list[dict]:
     _ensure_scanned()
@@ -247,6 +267,16 @@ def get_insights() -> dict:
     out = queries.graph_insights(conn)
     conn.close()
     return out
+
+
+@app.get("/api/search")
+def get_search(q: str = Query(...)) -> dict:
+    """Global search across programs, jobs, tables, copybooks, transactions, capabilities."""
+    _ensure_scanned()
+    conn = _conn()
+    results = queries.search(conn, q)
+    conn.close()
+    return {"query": q, "results": results}
 
 
 @app.post("/api/query")

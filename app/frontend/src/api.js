@@ -29,4 +29,6 @@ export const api = {
   source: (path) => fetch(`/api/source?path=${encodeURIComponent(path)}`).then(j),
   log: (limit = 100) => fetch(`/api/log?limit=${limit}`).then(j),
   logRaw: () => fetch("/api/log/raw").then(j),
+  search: (q) => fetch("/api/search?q=" + encodeURIComponent(q)).then(j),
+  rules: (pid) => fetch("/api/program/" + encodeURIComponent(pid) + "/rules").then(j),
 };

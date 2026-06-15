@@ -338,6 +338,167 @@ def _sql_lineage(body: str, ln: int) -> list[dict]:
     return flows
 
 
+# --- Business-rule extraction (rule-bearing PROCEDURE DIVISION logic) -------
+# Facts (the raw COBOL condition / calculation text) are `confirmed` from source;
+# the kind classification + plain-English rendering are *interpretation* (`inferred`).
+_REL_OPS = {
+    "=": "is equal to", "<": "is less than", ">": "is greater than",
+    "<=": "is less than or equal to", ">=": "is greater than or equal to",
+    "<>": "is not equal to",
+}
+# words that hint a condition is a validation/guard rather than a plain decision
+_VALIDATION_HINTS = ("VALID", "INVALID", "ERROR", "STATUS", "RETURN-CODE",
+                     "RC", "OK", "FAIL", "REJECT", "CHECK")
+
+
+def _proc_lines(text: str) -> tuple[list[tuple[int, str]], int]:
+    """Non-comment (line_no, text) lines inside the PROCEDURE DIVISION + its start line."""
+    up = text.upper()
+    proc_pos = up.find("PROCEDURE DIVISION")
+    if proc_pos < 0:
+        return [], -1
+    start = _line_of(text, proc_pos)
+    lines = [(i, l) for i, l in enumerate(text.splitlines(), 1)
+             if not _is_comment(l) and i > start]
+    return lines, start
+
+
+def _cond_text(tokens: list[tuple[str, int]], i: int) -> tuple[str, int]:
+    """Raw condition text after IF/WHEN at index i, up to THEN/a verb/'.'; returns (text, j)."""
+    j = i + 1
+    out: list[str] = []
+    while j < len(tokens):
+        t = tokens[j][0]
+        T = t.upper()
+        if t == "." or T == "THEN" or (T in _VERBS and T not in ("NOT",)):
+            break
+        out.append(t)
+        j += 1
+    return _join_tokens(out), j
+
+
+def _action_text(tokens: list[tuple[str, int]], i: int) -> str:
+    """Short summary of the guarded action: the first statement after the condition,
+    up to ELSE / END-IF / WHEN / '.'."""
+    out: list[str] = []
+    j = i
+    while j < len(tokens):
+        T = tokens[j][0].upper()
+        if T in ("ELSE", "END-IF", "WHEN", "END-EVALUATE") or tokens[j][0] == ".":
+            break
+        out.append(tokens[j][0])
+        j += 1
+    return _join_tokens(out)
+
+
+def _join_tokens(toks: list[str]) -> str:
+    """Re-render a token slice as readable text (no space before punctuation)."""
+    s = ""
+    for t in toks:
+        if not s or t in ").," or (s and s[-1] == "("):
+            s += t
+        else:
+            s += " " + t
+    return s.strip().rstrip(".").strip()
+
+
+def _render_condition(cond: str) -> str:
+    """Deterministic plain-English rendering of a simple relational condition (template)."""
+    m = re.match(rf"^\s*([A-Za-z][\w-]*)\s*(<=|>=|<>|=|<|>)\s*(.+?)\s*$", cond)
+    if m:
+        field, op, val = m.group(1), m.group(2), m.group(3).strip()
+        return f"{field} {_REL_OPS.get(op, op)} {val}"
+    return cond
+
+
+def _classify(cond: str, kind_hint: str | None) -> str:
+    if kind_hint:
+        return kind_hint
+    upper = cond.upper()
+    if any(h in upper for h in _VALIDATION_HINTS):
+        return "validation"
+    return "decision"
+
+
+def business_rules(text: str, program: str, rel_path: str) -> list[dict]:
+    """Extract rule-bearing logic (IF / EVALUATE WHEN / COMPUTE) from the PROCEDURE DIVISION.
+
+    Honesty (Principle 1): the raw *condition text* and its source line are `confirmed`
+    (they are in the source). The *kind* classification and *plain-English statement* are
+    interpretation, so each rule is flagged `inferred` (confidence ~0.6) while its
+    source_evidence still points at the real line. No business meaning is fabricated
+    beyond a literal templated rendering of the condition.
+    """
+    lines, _ = _proc_lines(text)
+    if not lines:
+        return []
+    toks = _tokenize_region(lines)
+    rules: list[dict] = []
+    n = len(toks)
+    i = 0
+    rid = 0
+
+    while i < n:
+        tok, ln = toks[i]
+        T = tok.upper()
+
+        if T == "IF":
+            cond, j = _cond_text(toks, i)
+            action = _action_text(toks, j)
+            kind = _classify(cond, None)
+            rid += 1
+            rules.append(_rule(rid, kind, cond, action, program, rel_path, ln))
+            i = j
+            continue
+
+        if T == "WHEN":                                   # EVALUATE … WHEN <value>
+            cond, j = _cond_text(toks, i)
+            if cond.upper() != "OTHER" and cond:
+                action = _action_text(toks, j)
+                rid += 1
+                rules.append(_rule(rid, "decision", cond, action, program, rel_path, ln))
+            i = j
+            continue
+
+        if T == "COMPUTE":                                # COMPUTE t = expr  (calculation)
+            clause, j = _clause(toks, i)
+            cond = _join_tokens(clause)
+            rid += 1
+            rules.append(_rule(rid, "calculation", cond, "", program, rel_path, ln,
+                               calculation=True))
+            i = j
+            continue
+
+        i += 1
+
+    return rules
+
+
+def _rule(rid: int, kind: str, cond: str, action: str, program: str, rel_path: str,
+          ln: int, calculation: bool = False) -> dict:
+    fields = _names(re.findall(_TOKEN_RE, cond))
+    if calculation:                                       # COMPUTE t = expr -> "Set t to expr"
+        m = re.match(r"^\s*(.+?)\s*=\s*(.+?)\s*$", cond)
+        statement = (f"Set {m.group(1)} to {m.group(2)}." if m
+                     else f"Calculate {cond}.")
+    else:
+        rendered = _render_condition(cond)
+        statement = (f"When {rendered}, then {action.lower()}." if action
+                     else f"When {rendered}.")
+    return {
+        "id": f"{program}-R{rid:03d}",
+        "kind": kind,
+        "condition": cond,
+        "action": action,
+        "statement": statement,
+        "fields": fields,
+        "tables": [],
+        "source_evidence": f"{rel_path}:{ln}",
+        "confidence": 0.6,
+        "validation_status": "inferred",
+    }
+
+
 # --- EXEC CICS helpers (the online layer) ----------------------------------
 _CICS_BLOCK = re.compile(r"(?is)EXEC\s+CICS(.*?)END-EXEC")
 _ARG = r"('[^']*'|\"[^\"]*\"|[A-Za-z][\w-]*)"

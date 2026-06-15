@@ -1,4 +1,13 @@
 import React, { useEffect, useState } from "react";
+import {
+  HashRouter,
+  Routes,
+  Route,
+  NavLink,
+  Navigate,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import { api } from "./api.js";
 import Dashboard from "./components/Dashboard.jsx";
 import Programs from "./components/Programs.jsx";
@@ -9,34 +18,79 @@ import QueryConsole from "./components/QueryConsole.jsx";
 import CallGraph from "./components/CallGraph.jsx";
 import Capabilities from "./components/Capabilities.jsx";
 import QaLog from "./components/QaLog.jsx";
+import GlobalSearch from "./components/GlobalSearch.jsx";
 
 const NAV = [
-  ["dashboard", "Dashboard"],
-  ["programs", "Programs"],
-  ["capabilities", "Capabilities"],
-  ["jobs", "Jobs"],
-  ["graph", "Call Graph"],
-  ["roots", "Root Programs"],
-  ["deadcode", "Dead Code"],
-  ["query", "Query Console"],
-  ["log", "Q&A Log"],
+  ["/", "Dashboard"],
+  ["/programs", "Programs"],
+  ["/capabilities", "Capabilities"],
+  ["/jobs", "Jobs"],
+  ["/graph", "Call Graph"],
+  ["/roots", "Root Programs"],
+  ["/deadcode", "Dead Code"],
+  ["/query", "Query Console"],
+  ["/log", "Q&A Log"],
 ];
 
-export default function App() {
-  const [view, setView] = useState("dashboard");
-  const [selected, setSelected] = useState(null); // program id for detail
+// Navigation helpers shared with the existing components, which expect
+// `onOpenProgram(pid)` and `go(view)` callbacks. We adapt them to router routes.
+function useNav() {
+  const navigate = useNavigate();
+  const openProgram = (pid) => navigate("/program/" + encodeURIComponent(pid));
+  // Back-compat: old screens called go("graph"), go("roots"), etc.
+  const go = (v) => navigate(v === "dashboard" ? "/" : "/" + v);
+  return { openProgram, go };
+}
+
+// Small wrappers that inject the router-backed nav callbacks into each screen.
+function DashboardRoute() {
+  const { openProgram, go } = useNav();
+  return <Dashboard onOpenProgram={openProgram} go={go} />;
+}
+function ProgramsRoute() {
+  const { openProgram } = useNav();
+  return <Programs onOpenProgram={openProgram} />;
+}
+function ProgramDetailRoute() {
+  const { pid } = useParams();
+  const { openProgram, go } = useNav();
+  return <ProgramDetail pid={pid} onOpenProgram={openProgram} back={() => go("programs")} />;
+}
+function JobsRoute() {
+  const { openProgram } = useNav();
+  return <Jobs onOpenProgram={openProgram} />;
+}
+function CallGraphRoute() {
+  const { openProgram } = useNav();
+  return <CallGraph onOpenProgram={openProgram} />;
+}
+function CapabilitiesRoute() {
+  const { openProgram } = useNav();
+  return <Capabilities onOpenProgram={openProgram} />;
+}
+function RootsRoute() {
+  const { openProgram } = useNav();
+  return <Lists kind="roots" onOpenProgram={openProgram} />;
+}
+function DeadcodeRoute() {
+  const { openProgram } = useNav();
+  return <Lists kind="deadcode" onOpenProgram={openProgram} />;
+}
+function QueryRoute() {
+  const { openProgram } = useNav();
+  return <QueryConsole onOpenProgram={openProgram} />;
+}
+
+function Layout() {
   const [health, setHealth] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => { api.health().then(setHealth).catch((e) => setError(String(e))); }, []);
 
-  const openProgram = (pid) => { setSelected(pid); setView("program"); };
-  const go = (v) => { setSelected(null); setView(v); };
-
   const rescan = async () => {
     setScanning(true); setError(null);
-    try { await api.scan(); setView((v) => v); window.dispatchEvent(new Event("mip-rescan")); }
+    try { await api.scan(); window.dispatchEvent(new Event("mip-rescan")); }
     catch (e) { setError(String(e)); }
     finally { setScanning(false); }
   };
@@ -46,8 +100,9 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand">MIP<small>Mainframe Intelligence Platform</small></div>
         <nav className="nav">
-          {NAV.map(([k, label]) => (
-            <button key={k} className={view === k ? "active" : ""} onClick={() => go(k)}>{label}</button>
+          {NAV.map(([path, label]) => (
+            <NavLink key={path} to={path} end={path === "/"}
+                     className={({ isActive }) => (isActive ? "active" : "")}>{label}</NavLink>
           ))}
         </nav>
         <div className="src-box">
@@ -59,6 +114,7 @@ export default function App() {
 
       <main className="main">
         <div className="topbar">
+          <GlobalSearch />
           <div style={{ flex: 1 }} />
           <button className="btn secondary" onClick={rescan} disabled={scanning}>
             {scanning ? "Scanning…" : "↻ Rescan source"}
@@ -66,17 +122,28 @@ export default function App() {
         </div>
         {error && <div className="error">{error}</div>}
 
-        {view === "dashboard" && <Dashboard onOpenProgram={openProgram} go={go} />}
-        {view === "programs" && <Programs onOpenProgram={openProgram} />}
-        {view === "program" && <ProgramDetail pid={selected} onOpenProgram={openProgram} back={() => go("programs")} />}
-        {view === "jobs" && <Jobs onOpenProgram={openProgram} />}
-        {view === "graph" && <CallGraph onOpenProgram={openProgram} />}
-        {view === "capabilities" && <Capabilities onOpenProgram={openProgram} />}
-        {view === "roots" && <Lists kind="roots" onOpenProgram={openProgram} />}
-        {view === "deadcode" && <Lists kind="deadcode" onOpenProgram={openProgram} />}
-        {view === "query" && <QueryConsole onOpenProgram={openProgram} />}
-        {view === "log" && <QaLog />}
+        <Routes>
+          <Route path="/" element={<DashboardRoute />} />
+          <Route path="/programs" element={<ProgramsRoute />} />
+          <Route path="/program/:pid" element={<ProgramDetailRoute />} />
+          <Route path="/capabilities" element={<CapabilitiesRoute />} />
+          <Route path="/jobs" element={<JobsRoute />} />
+          <Route path="/graph" element={<CallGraphRoute />} />
+          <Route path="/roots" element={<RootsRoute />} />
+          <Route path="/deadcode" element={<DeadcodeRoute />} />
+          <Route path="/query" element={<QueryRoute />} />
+          <Route path="/log" element={<QaLog />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <HashRouter>
+      <Layout />
+    </HashRouter>
   );
 }

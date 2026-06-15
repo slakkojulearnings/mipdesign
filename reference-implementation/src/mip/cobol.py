@@ -7,7 +7,7 @@ not asserted); truly unresolved ones stay `needs_review`.
 
 from __future__ import annotations
 
-from . import parser_backend
+from . import cobol_ast, parser_backend
 from .records import Edge, Evidence
 
 
@@ -61,3 +61,12 @@ def field_lineage(text: str, program: str, rel_path: str) -> list[dict]:
     return [{"program": program, "src": f["src"], "dst": f["dst"],
              "kind": f["kind"], "evidence": f"{rel_path}:{f['line']}"}
             for f in u.field_flows]
+
+
+def business_rules(text: str, program: str, rel_path: str) -> list[dict]:
+    """Rule-bearing PROCEDURE DIVISION logic (IF / EVALUATE WHEN / COMPUTE).
+
+    The raw condition + its source line are confirmed facts; the kind classification and
+    plain-English rendering are interpretation (flagged `inferred`). See cobol_ast.
+    """
+    return cobol_ast.business_rules(text, program, rel_path)

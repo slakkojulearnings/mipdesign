@@ -15,6 +15,8 @@ export default function ProgramDetail({ pid, onOpenProgram, back }) {
   const [impact, setImpact] = useState(null);
   const [impactErr, setImpactErr] = useState(null);
   const [lineage, setLineage] = useState(null);
+  const [rules, setRules] = useState(null);
+  const [rulesErr, setRulesErr] = useState(null);
 
   if (loading) return <div className="loading">Loading…</div>;
   if (err) return <div className="error">{err}</div>;
@@ -37,6 +39,12 @@ export default function ProgramDetail({ pid, onOpenProgram, back }) {
   const runLineage = async () => {
     try { setLineage(await api.lineage(pid)); }
     catch (e) { setLineage({ flows: [], error: String(e) }); }
+  };
+
+  const runRules = async () => {
+    setRulesErr(null);
+    try { setRules(await api.rules(pid)); }
+    catch (e) { setRulesErr(String(e)); }
   };
 
   return (
@@ -114,6 +122,40 @@ export default function ProgramDetail({ pid, onOpenProgram, back }) {
                 <span className="badge ok">{f.kind}</span> <span className="tag">{f.evidence}</span>
               </div>
             )))}
+      </div>
+
+      <div className="panel">
+        <h3>Business rules
+          <button className="btn secondary" style={{ marginLeft: 8 }} onClick={runRules}>Extract</button>
+          <span className="tag" style={{ marginLeft: 8 }}>conditions &amp; validations recovered from the code</span>
+        </h3>
+        {rulesErr && <div className="error">{rulesErr}</div>}
+        {!rules && !rulesErr && <div className="muted">Click “Extract” to recover the business rules in this program.</div>}
+        {rules && (rules.rules.length === 0
+          ? <div className="muted">No business rules detected.</div>
+          : rules.rules.map((r, i) => {
+              const review = r.validation_status !== "confirmed";
+              return (
+                <div key={r.id || i} className="rule">
+                  <div className="rule-head">
+                    <span className={`badge ${review ? "review" : "ok"}`}>{r.kind || "rule"}</span>
+                    {review
+                      ? <span className="badge review">{r.validation_status || "inferred"}{r.confidence != null ? ` · ${r.confidence}` : ""}</span>
+                      : <span className="badge ok">confirmed{r.confidence != null ? ` · ${r.confidence}` : ""}</span>}
+                  </div>
+                  {r.statement && <div className="rule-stmt">{r.statement}</div>}
+                  {r.condition && <pre className="rule-cond">{r.condition}</pre>}
+                  {r.action && <div className="muted" style={{ fontSize: 13 }}>→ {r.action}</div>}
+                  {((r.fields && r.fields.length) || (r.tables && r.tables.length)) ? (
+                    <div className="cap-sec" style={{ marginTop: 8 }}>
+                      {(r.fields || []).map((f) => <span key={"f" + f} className="pill">{f}</span>)}
+                      {(r.tables || []).map((t) => <span key={"t" + t} className="pill tbl">{t}</span>)}
+                    </div>
+                  ) : null}
+                  {r.source_evidence && <span className="tag">{r.source_evidence}</span>}
+                </div>
+              );
+            }))}
       </div>
 
       {d.source_path && (

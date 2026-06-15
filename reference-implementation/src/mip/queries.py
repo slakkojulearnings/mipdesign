@@ -288,6 +288,61 @@ def graph_insights(conn: sqlite3.Connection) -> dict:
     }
 
 
+# --- global search --------------------------------------------------------
+def _score(needle: str, hay: str) -> int | None:
+    """Rank a case-insensitive substring match: exact=100, prefix=50, contains=10."""
+    h = hay.upper()
+    if h == needle:
+        return 100
+    if h.startswith(needle):
+        return 50
+    if needle in h:
+        return 10
+    return None
+
+
+def search(conn: sqlite3.Connection, q: str, limit: int = 25) -> list[dict]:
+    """Case-insensitive substring search across the estate. Ranks exact > prefix > contains.
+
+    Searches: program ids, job ids, DB2 tables, copybooks, transactions, and inferred
+    capability names. Returns at most `limit` results, highest score first.
+    """
+    needle = (q or "").strip().upper()
+    if not needle:
+        return []
+    out: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(kind: str, ident: str, detail: str) -> None:
+        key = (kind, ident)
+        if key in seen:
+            return
+        sc = _score(needle, ident)
+        if sc is None:
+            return
+        seen.add(key)
+        out.append({"kind": kind, "id": ident, "detail": detail, "score": sc})
+
+    for r in conn.execute("SELECT program_id, line_count FROM program"):
+        add("program", r["program_id"], f"COBOL program ({r['line_count'] or 0} lines)")
+    for r in conn.execute("SELECT job_id FROM job"):
+        add("job", r["job_id"], "JCL job")
+    for r in conn.execute(
+        "SELECT DISTINCT target_id FROM relationship WHERE target_type='db2_table'"):
+        add("table", r["target_id"], "DB2 table")
+    for r in conn.execute(
+        "SELECT DISTINCT target_id FROM relationship WHERE target_type='copybook'"):
+        add("copybook", r["target_id"], "Copybook")
+    for r in conn.execute(
+        "SELECT DISTINCT source_id FROM relationship WHERE source_type='transaction'"):
+        add("transaction", r["source_id"], "CICS transaction")
+    for c in capabilities(conn):
+        add("capability", c["capability"], f"Inferred capability (root {c['root']})")
+
+    out.sort(key=lambda x: (-x["score"], x["kind"], x["id"]))
+    return out[:limit]
+
+
 # --- tiny NL router -------------------------------------------------------
 def _program_in(text: str, known: list[str]) -> str | None:
     # Only ever return a real program name — never a stray uppercase word like SHOW/WHAT,
