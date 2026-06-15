@@ -1,62 +1,68 @@
-"""Repository scanner — Level 1 (inventory).
+"""Repository scanner — Level 1 (inventory), adaptive & content-driven.
 
-Classifies each file by CONTENT first (real mainframe PDS members usually have no
-file extension), then falls back to the library folder name, then extension.
+Real estates are ~180k members, mostly extension-less, with folders that differ per
+site and change over time. So classification is **learned from the estate**, not from a
+hardcoded folder map:
 
-Scale note: a real estate is ~180k members, many of them compiled/binary library
-members (load modules, DBRMs, maps). To stay fast and to avoid garbage-parsing
-binary content, classification reads only a capped header of each file:
+  1. CONTENT first — language signatures (COBOL/JCL/DB2/CICS/copybook) that are intrinsic
+     to the languages, not site config. A capped header read is enough (signatures sit at
+     the top of a member), so we never read a multi-thousand-line program in full.
+  2. BINARY by content — NUL bytes / high non-text ratio in the header => "binary",
+     inventoried but never parsed. This catches load modules/DBRMs/maps regardless of
+     folder name.
+  3. LEARNED FOLDER PROFILE — pass 1 tallies, per directory, the content-resolved type
+     distribution and the binary ratio. Pass 2 uses that profile to classify members the
+     content couldn't resolve: a member in a folder that is predominantly one source type
+     inherits it (folder-inferred); a member in a predominantly-binary folder is treated
+     as binary. New or renamed folders therefore "just work" with no code change.
+  4. Thin conventions — extension hints, and a small (env-extensible: MIP_BINARY_LIBS)
+     list of well-known compiled-library names as a last-resort safety net for the rare
+     text-looking member inside a conventionally-binary library.
 
-  * If the header looks binary (NUL bytes or a high ratio of undecodable bytes),
-    the file is classified "binary", inventoried, and NOT read further. Binary
-    library members (LOADLIB, CICSLOAD, DBRMLIB, ...) are inventory-only — MIP
-    never parses them as source.
-  * Otherwise the capped header is decoded as text and classified with the same
-    COBOL/JCL/DB2/CICS/copybook signatures as before (they all appear early in a
-    member, so the header is sufficient and no full read is needed to classify).
-
+`profile_estate(root)` exposes the learned per-folder map for inspection.
 See docs/MAINFRAME_ARTIFACTS.md for the artifact taxonomy and IMS/MQ scope.
 """
 
 from __future__ import annotations
 
+import os
 import re
+from collections import Counter, defaultdict
 from pathlib import Path
 
 from .records import Artifact, Evidence, make_id
 
 # Only the first HEADER_CAP bytes of each file are read for classification.
-# Every text signature below appears at the top of a member, so this is enough
-# to classify without ever reading a multi-thousand-line program in full.
 HEADER_CAP = 64 * 1024
 
-# content signatures
+# content signatures (intrinsic language facts, not site/folder config)
 _JOB_LINE = re.compile(r"(?mi)^//\w+\s+JOB\b")
 _EXEC_PGM = re.compile(r"(?i)EXEC\s+PGM=")
 _LEVEL_LINE = re.compile(r"(?m)^\s*\d{2}\s+[\w-]+")
 
-_FOLDER_HINT = {
-    "JCL": "jcl", "PROCLIB": "proc", "COBOL": "cobol", "COB": "cobol",
-    "COPYLIB": "copybook", "COPY": "copybook", "CPY": "copybook",
-    "DB2": "db2", "DDL": "db2", "VSAM": "vsam", "CICS": "cics",
-}
+# extension hints — a weak, last-resort per-file signal (real PDS members rarely have one)
 _EXT_HINT = {
     ".cbl": "cobol", ".cob": "cobol", ".cpy": "copybook",
     ".jcl": "jcl", ".sql": "db2",
 }
 
-# Library/folder names whose members are compiled/binary artifacts. MIP inventories
-# these and skips them for parsing (they are not source). See the artifact doc for
-# what each is and the low-confidence relationship a binary name still implies.
-_BINARY_LIBRARY_HINT = {
+# Well-known compiled/binary library names. A thin convention fallback only — binary is
+# normally decided by CONTENT (_looks_binary) and the learned folder binary-ratio. Extend
+# at runtime without code changes via MIP_BINARY_LIBS="NAME1,NAME2".
+_DEFAULT_BINARY_LIBS = {
     "LOADLIB", "LOAD", "LINKLIB", "CICSLOAD", "LSM", "DBRMLIB", "DBRM",
     "DBDLIB", "DBD", "PSBLIB", "PSB", "MAPLIB", "MAP", "LDV", "VOG",
 }
 
-# Bytes that are normal in EBCDIC-or-ASCII mainframe text. Anything outside this
-# set (other than the printable range) counts toward the "looks binary" ratio.
 _TEXT_BYTES = bytes(range(0x20, 0x7F)) + b"\t\n\r\f\x0b"
 _NON_TEXT_RATIO = 0.30
+_FOLDER_DOMINANCE = 0.5     # share of a folder that must be one type to infer it
+_FOLDER_BINARY_RATIO = 0.8  # folders this binary => unresolved members are binary too
+
+
+def _binary_libs() -> set[str]:
+    extra = os.environ.get("MIP_BINARY_LIBS", "")
+    return _DEFAULT_BINARY_LIBS | {x.strip().upper() for x in extra.split(",") if x.strip()}
 
 
 def _looks_binary(chunk: bytes) -> bool:
@@ -69,19 +75,13 @@ def _looks_binary(chunk: bytes) -> bool:
     return (non_text / len(chunk)) > _NON_TEXT_RATIO
 
 
-def _binary_library_hint(path: Path) -> bool:
-    """True if the path sits in a known compiled/binary library."""
-    return any(part.upper() in _BINARY_LIBRARY_HINT for part in path.parts)
+def _binary_library_hint(path: Path, libs: set[str]) -> bool:
+    return any(part.upper() in libs for part in path.parts)
 
 
-def classify(text: str, path: Path) -> str:
-    """Classify already-decoded TEXT (used by callers that hold the text).
-
-    Operates on whatever string it is given; in scan() this is the capped header.
-    """
+def _content_type(text: str) -> str | None:
+    """Resolve a type from intrinsic content signatures, or None if unrecognised."""
     up = text.upper()
-
-    # 1. content signatures (works for extension-less members)
     if _JOB_LINE.search(text) or _EXEC_PGM.search(text):
         return "jcl"
     if "IDENTIFICATION DIVISION" in up and "PROGRAM-ID" in up:
@@ -89,23 +89,30 @@ def classify(text: str, path: Path) -> str:
     if "CREATE TABLE" in up:
         return "db2"
     if "DEFINE TRANSACTION" in up or "DEFINE PROGRAM" in up or "DFHCSDUP" in up:
-        return "cics"      # CICS CSD/RDO resource definitions
+        return "cics"
     if _LEVEL_LINE.search(text) and "PIC" in up:
-        return "copybook"  # COBOL data layout without a PROGRAM-ID
-
-    # 2. fall back to the library folder name
-    for part in path.parts:
-        hint = _FOLDER_HINT.get(part.upper())
-        if hint:
-            return hint
-
-    # 3. fall back to extension
-    return _EXT_HINT.get(path.suffix.lower(), "unknown")
+        return "copybook"
+    return None
 
 
-def scan(root: str | Path) -> list[Artifact]:
-    root = Path(root)
-    artifacts: list[Artifact] = []
+def classify(text: str, path: Path) -> str:
+    """Classify a single already-decoded TEXT member (content + extension only).
+
+    Folder learning needs whole-estate context, so it lives in scan(); this helper is the
+    per-file fallback used by callers that already hold the text.
+    """
+    return _content_type(text) or _EXT_HINT.get(path.suffix.lower(), "unknown")
+
+
+# (rel, parent_dir, size, line_count, content_type|None, is_binary)
+def _profile_pass(root: Path):
+    """Pass 1: read each header once, content-classify, and learn per-folder profiles."""
+    libs = _binary_libs()
+    recs: list[tuple] = []
+    text_counts: dict[str, Counter] = defaultdict(Counter)
+    binary_count: dict[str, int] = defaultdict(int)
+    total: dict[str, int] = defaultdict(int)
+
     for p in sorted(root.rglob("*")):
         if not p.is_file():
             continue
@@ -114,28 +121,74 @@ def scan(root: str | Path) -> list[Artifact]:
                 head = fh.read(HEADER_CAP)
         except OSError:
             continue
-
-        size = p.stat().st_size                       # cheap; no read needed
-        capped = size > len(head)                     # file is larger than the header
+        size = p.stat().st_size
+        capped = size > len(head)
         rel = str(p.relative_to(root)).replace("\\", "/")
+        parent = str(p.parent.relative_to(root)).replace("\\", "/")
+        total[parent] += 1
 
-        # binary path FIRST: a binary member must never be misread as text.
-        if _looks_binary(head) or _binary_library_hint(p):
-            atype = "binary"
-            line_count = None                         # do not line-count binary
+        if _looks_binary(head) or _binary_library_hint(p, libs):
+            binary_count[parent] += 1
+            recs.append((rel, parent, size, None, None, True))
         else:
             text = head.decode("utf-8", errors="replace")
-            atype = classify(text, p)
-            # line_count from the header bytes only; if the file was capped this is a
-            # partial count (None signals "unknown / not fully read") — never a 2nd read.
+            ctype = _content_type(text)
             line_count = None if capped else head.count(b"\n") + 1
+            recs.append((rel, parent, size, line_count, ctype, False))
+            key = ctype or _EXT_HINT.get(Path(rel).suffix.lower())
+            if key:
+                text_counts[parent][key] += 1
 
+    profile: dict[str, dict] = {}
+    for d, members in total.items():
+        tc = text_counts[d]
+        dominant = tc.most_common(1)[0][0] if tc else None
+        profile[d] = {
+            "dominant_type": dominant,
+            "type_counts": dict(tc),
+            "binary_ratio": round(binary_count[d] / members, 3) if members else 0.0,
+            "members": members,
+        }
+    return recs, profile
+
+
+def profile_estate(root: str | Path) -> dict:
+    """Learned per-folder profile: {folder: {dominant_type, type_counts, binary_ratio, members}}.
+
+    A discovery artifact in its own right — shows which folders hold what, derived from the
+    actual estate rather than any hardcoded assumption.
+    """
+    return _profile_pass(Path(root))[1]
+
+
+def scan(root: str | Path) -> list[Artifact]:
+    root = Path(root)
+    recs, profile = _profile_pass(root)
+    artifacts: list[Artifact] = []
+    for rel, parent, size, line_count, ctype, is_binary in recs:
+        if is_binary:
+            atype = "binary"
+        elif ctype:                                   # resolved by content
+            atype = ctype
+        else:                                         # learned-folder / extension fallback
+            ext = _EXT_HINT.get(Path(rel).suffix.lower())
+            prof = profile.get(parent, {})
+            members = prof.get("members") or 0
+            dom = prof.get("dominant_type")
+            if ext:
+                atype = ext
+            elif members and prof.get("binary_ratio", 0.0) >= _FOLDER_BINARY_RATIO:
+                atype = "binary"                      # folder is overwhelmingly binary
+            elif dom and members and prof["type_counts"].get(dom, 0) / members >= _FOLDER_DOMINANCE:
+                atype = dom                           # folder-inferred dominant source type
+            else:
+                atype = "unknown"
         artifacts.append(
             Artifact(
                 artifact_id=make_id(rel),
                 path=rel,
                 artifact_type=atype,
-                file_name=p.name,
+                file_name=Path(rel).name,
                 size_bytes=size,
                 line_count=line_count,
                 evidence=Evidence.confirmed(f"scan:{rel}", method="scan"),
