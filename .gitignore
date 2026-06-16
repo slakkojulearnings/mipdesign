@@ -13,6 +13,8 @@ app/question_log.jsonl
 graph.html
 graph.png
 reference-implementation/lib/
+# Capability requirements exported from the UI ("Export Markdown") — generated output
+/*-requirements*.md
 
 # Node / frontend build
 node_modules/
