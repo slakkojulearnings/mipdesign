@@ -467,7 +467,7 @@ the Claude Code agents that *built* MIP. Both, with examples.
 
 ## A. MIP skills — the "job descriptions" the AI follows
 
-In [`03-skills/`](../03-skills/) there are **12 skills**, each a folder with a `SKILL.md` in
+In [`03-skills/`](../03-skills/) there are **13 skills**, each a folder with a `SKILL.md` in
 the open **Agent Skills standard** ([agentskills.io](https://agentskills.io/specification)).
 A skill is a *persona with a charter* — it makes the AI behave consistently, like giving
 each role a clear job description.
@@ -482,6 +482,7 @@ each role a clear job description.
 | `resilience-engineer` | Finds single points of failure, dead code, operational risk. |
 | `security-compliance-analyst` | Flags PII / financial / regulatory data and impact. |
 | `mainframe-modernization-architect` | Turns understanding into a safe, staged plan. |
+| `legacy-rewrite-engineer` | Drafts target-language code from the evidence-rich requirements (grounded, test-verified). |
 | `test-engineer` | Keeps everything tested and trustworthy. |
 | `code-reviewer` | Critiques designs/code for correctness and honesty. |
 | `documentation-writer` | Writes the docs (like this one). |
@@ -509,7 +510,7 @@ ad-hoc prompting.
 ## C. Project agents — Claude Code helpers that ship with the repo
 
 [`.claude/agents/`](../.claude/agents/) defines two ready agents (and `.claude/skills/`
-mirrors the 12 skills so Claude Code auto-discovers them):
+mirrors the 13 skills so Claude Code auto-discovers them):
 
 - **`mip-discovery`** — *"Analyse `source_mf_code`"* → runs the engine and reports
   inventory, roots, dead code, the capability map, and blast-radius examples, each with
@@ -628,7 +629,7 @@ cd ../../reference-implementation
 uv run uvicorn mip.api:app --port 8000
 
 # prove it (from reference-implementation)
-uv run pytest -q                              # 90 passing
+uv run pytest -q                              # 97 passing
 uv run python ../03-skills/validate_catalog.py   # skills ⇄ catalog in sync
 
 # knobs — set before the command that uses them

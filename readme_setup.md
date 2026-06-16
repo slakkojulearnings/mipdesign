@@ -74,10 +74,10 @@ Q&A Log**. Each program page has an **Impact / blast radius** analysis (NetworkX
 ```bash
 cd reference-implementation
 uv run pytest -q                          # 9 tests: ground-truth + graph layer
-python ../03-skills/validate_catalog.py   # skills <-> catalog in sync (12 skills)
+python ../03-skills/validate_catalog.py   # skills <-> catalog in sync (13 skills)
 ```
 
-Expected: `9 passed`, and the validator prints `OK — 12 skills valid …`.
+Expected: `9 passed`, and the validator prints `OK — 13 skills valid …`.
 
 ## 7. Evaluate the quality (it measures itself)
 

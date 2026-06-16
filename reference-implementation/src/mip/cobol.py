@@ -72,6 +72,40 @@ def business_rules(text: str, program: str, rel_path: str) -> list[dict]:
     return cobol_ast.business_rules(text, program, rel_path)
 
 
+def program_spec(text: str, program: str, rel_path: str) -> dict:
+    """Granular, developer-grade spec of one program — detailed enough to re-implement it,
+    with every fact tied to source. Deterministic (uses the canonical grammar parser):
+
+      data_structures : record layouts grouped by DATA DIVISION section (level/name/PIC)
+      procedure_outline: per-paragraph step list (verb + source line) ≈ pseudocode
+      io               : tables read/written, copybooks used, programs called
+      rules            : business rules, each with its real source snippet + typed fields
+
+    Conditions/snippets/line numbers are confirmed; rule kind + plain-English statement are
+    inferred (carried through from business_rules)."""
+    u = cobol_ast.parse(text)
+    pic = {d["name"]: d["pic"] for d in u.data_items}
+    rules = cobol_ast.business_rules(text, program, rel_path)
+    for r in rules:
+        ln = int(r["source_evidence"].rsplit(":", 1)[-1])
+        r["snippet"] = cobol_ast.snippet(text, ln)
+        r["typed_fields"] = [{"name": f, "pic": pic.get(f)} for f in r["fields"]]
+    return {
+        "program": program,
+        "complexity": u.complexity,
+        "data_structures": cobol_ast.data_layout(u.data_items),
+        "procedure_outline": cobol_ast.procedure_outline(text),
+        "io": {
+            "reads": sorted({s["table"] for s in u.sql if s["op"] == "READS"}),
+            "writes": sorted({s["table"] for s in u.sql if s["op"] == "WRITES"}),
+            "copybooks": sorted({c["name"] for c in u.copies}),
+            "calls": [{"target": c["target"], "validation": c["validation"], "via": c.get("via")}
+                      for c in u.calls],
+        },
+        "rules": rules,
+    }
+
+
 # CICS rel -> the conventional online interaction verb shown in the diagram.
 _CICS_VERB = {"CALLS": "LINK", "READS": "READS", "WRITES": "WRITES", "USES": "USES",
               "STARTS": "STARTS"}

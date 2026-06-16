@@ -124,3 +124,34 @@ estate (`tests/test_antlr_backend.py::test_antlr_parity_with_default_when_gramma
 > fully portable (stdlib-only); it stays the **reference / source of truth**. The advanced
 > backend is for production coverage and is deliberately isolated so it can't compromise
 > the zero-setup path. The shared test suite is the contract both backends must satisfy.
+
+---
+
+## Seeing the difference (default vs advanced)
+
+A frequent question: *"both backends give the same output — what does advanced buy me?"*
+On clean COBOL inside the common subset they are **identical by design** (the parity test
+above enforces it). The advanced backend's distinct value is its **preprocessing stage** —
+`COPY ... REPLACING` expansion, `EXEC` folding, comment-paragraph stripping — which only
+changes the extracted facts when a copybook **resolver** supplies the copybook text.
+
+`scripts/parser_compare.py` makes this visible on a worked example
+(`examples/advanced_parser/`), where the called program name is hidden inside a copybook
+behind a `REPLACING` placeholder:
+
+```
+uv run python scripts/parser_compare.py examples/advanced_parser/CARDADV \
+    --copylib examples/advanced_parser
+```
+
+- **default** and **advanced (raw)** → no CALL (parity): the copybook is not expanded.
+- **advanced + resolver** → `CALL 'REALSUB'` (confirmed): COPY `REPLACING ==:SUBPGM:== BY
+  ==REALSUB==` inlines `CALL ':SUBPGM:'` from the copybook and rewrites it, so the call
+  edge the default parser cannot see is recovered.
+
+> Note (honest): the production `parse(text)` path does **not** pass a resolver, so today
+> the toggle does not change results on the sample estate. Wiring the copybook resolver
+> into the pipeline (so real estates expand their `COPY ... REPLACING`) is the next step
+> that turns the advanced backend's coverage into a visible production gain. The
+> `examples/` member lives outside `sample_estate/` so it does not affect the ground-truth
+> counts the test suite asserts.

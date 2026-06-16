@@ -36,6 +36,7 @@ _VERBS = {
     "GOBACK", "RETURN", "INITIALIZE", "STRING", "UNSTRING", "INSPECT", "SEARCH",
 }
 _PARA_RE = re.compile(r"^\s{0,7}([A-Za-z0-9][A-Za-z0-9-]*)\.\s*$")
+_SECTION = re.compile(r"(?i)^\s*([A-Z][A-Z-]*)\s+SECTION\s*\.")    # DATA DIVISION sections
 _NON_PARA = {"GOBACK", "STOP", "EXIT", "CONTINUE", "END-IF", "END-EVALUATE",
              "END-PERFORM", "END-EXEC", "END-CALL"}
 _PROGRAM_ID = re.compile(r"(?i)PROGRAM-ID\s*\.\s*([A-Z0-9][A-Z0-9-]*)")
@@ -96,6 +97,7 @@ def parse(text: str) -> Unit:
 
     # ---- DATA DIVISION items + COPY (anywhere) ----
     proc_pos = up.find("PROCEDURE DIVISION")
+    section = None                                  # current DATA DIVISION section
     for ln, txt in lines:
         # copies
         for m in _COPY.finditer(txt):
@@ -103,11 +105,16 @@ def parse(text: str) -> Unit:
         # data items only before PROCEDURE
         if proc_pos >= 0 and _line_of(text, proc_pos) <= ln:
             continue
+        sm = _SECTION.match(txt)
+        if sm:                                       # FILE / WORKING-STORAGE / LINKAGE / …
+            section = sm.group(1).upper()
+            continue
         di = _DATA_ITEM.match(txt)
         if di:
             pic = _PIC.search(di.group(3))
             u.data_items.append({"level": int(di.group(1)), "name": di.group(2).upper(),
-                                 "pic": pic.group(1) if pic else None, "line": ln})
+                                 "pic": pic.group(1) if pic else None, "line": ln,
+                                 "section": section})
 
     # ---- EXEC SQL blocks: READS/WRITES tables + field lineage ----
     for m in _SQL_BLOCK.finditer(code_text):
@@ -561,3 +568,65 @@ def _cics_edges(body: str, ln: int) -> list[dict]:
         if a:
             emit("STARTS", "transaction", a)
     return edges
+
+
+# --- Granular developer-view helpers (deterministic, source-cited) ----------
+
+def snippet(text: str, line: int, before: int = 1, after: int = 2) -> list[dict]:
+    """Real source lines around a 1-based line number, for a code snippet in the UI/docs.
+    Returns [{line, text}] — confirmed verbatim source, never paraphrased."""
+    src = text.splitlines()
+    lo, hi = max(1, line - before), min(len(src), line + after)
+    return [{"line": i, "text": src[i - 1].rstrip()} for i in range(lo, hi + 1)]
+
+
+def data_layout(items: list[dict]) -> list[dict]:
+    """Group parsed data items by DATA DIVISION section (FILE / WORKING-STORAGE / LINKAGE …)
+    so the FR can show the record layouts a developer must declare. Section is None for
+    items found before any SECTION header."""
+    order, groups = [], {}
+    for d in items:
+        sec = d.get("section") or "UNSPECIFIED"
+        if sec not in groups:
+            groups[sec] = []
+            order.append(sec)
+        groups[sec].append({"level": d["level"], "name": d["name"],
+                            "pic": d["pic"], "line": d["line"]})
+    return [{"section": s, "items": groups[s]} for s in order]
+
+
+def procedure_outline(text: str) -> list[dict]:
+    """Per-paragraph step list (verb + source line) — a faithful pseudocode skeleton of the
+    PROCEDURE DIVISION in execution order. Captures the leading verb of each statement line;
+    multi-line statements are represented by their first line (enough to follow the logic)."""
+    up = text.upper()
+    proc_pos = up.find("PROCEDURE DIVISION")
+    if proc_pos < 0:
+        return []
+    proc_start = _line_of(text, proc_pos)
+    lines = [(i, l) for i, l in enumerate(text.splitlines(), 1) if not _is_comment(l)]
+    out: list[dict] = []
+    cur = {"paragraph": "(main)", "steps": []}
+    seen_para = False
+    for ln, txt in lines:
+        if ln <= proc_start:
+            continue
+        pm = _PARA_RE.match(txt)
+        if pm:
+            nm = pm.group(1).upper()
+            if nm not in _NON_PARA and not nm.endswith(("DIVISION", "SECTION")):
+                if cur["steps"] or seen_para:
+                    out.append(cur)
+                cur = {"paragraph": nm, "steps": []}
+                seen_para = True
+                continue
+        s = txt.strip()
+        if not s:
+            continue
+        m = re.match(r"([A-Za-z][A-Za-z0-9-]*)", s)
+        verb = m.group(1).upper() if m else ""
+        if verb in _VERBS:
+            cur["steps"].append({"verb": verb, "text": s.rstrip(". "), "line": ln})
+    if cur["steps"]:
+        out.append(cur)
+    return out

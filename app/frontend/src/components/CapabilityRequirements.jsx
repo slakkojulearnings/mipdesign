@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { api } from "../api.js";
 import { useData } from "../hooks.js";
 
@@ -52,6 +52,41 @@ function toMarkdown(d) {
     L.push("_No IF / EVALUATE / COMPUTE rules found in the member programs._");
     L.push("");
   }
+
+  // ---- Developer detail (re-implementation spec) ----
+  const withSpec = d.programs.filter((p) => p.spec);
+  if (withSpec.length) {
+    L.push("## Developer detail (re-implementation spec)");
+    L.push("");
+    withSpec.forEach((p) => {
+      const s = p.spec;
+      L.push(`### ${p.program}`);
+      L.push("");
+      L.push("**Data structures**");
+      s.data_structures.forEach((g) => {
+        L.push(`- _${g.section}_`);
+        g.items.forEach((it) => L.push(`  - ${String(it.level).padStart(2, "0")} \`${it.name}\`${it.pic ? ` PIC ${it.pic}` : ""}`));
+      });
+      L.push("");
+      L.push("**Procedure outline**");
+      s.procedure_outline.forEach((o) => L.push(`- \`${o.paragraph}\`: ${o.steps.map((x) => x.verb).join(" → ") || "—"}`));
+      L.push("");
+      L.push(`**I/O** — reads: ${s.io.reads.join(", ") || "—"}; writes: ${s.io.writes.join(", ") || "—"}; copybooks: ${s.io.copybooks.join(", ") || "—"}; calls: ${s.io.calls.map((c) => c.target).join(", ") || "—"}`);
+      L.push("");
+      if (s.rules.length) {
+        L.push("**Rules with code**");
+        s.rules.forEach((r) => {
+          L.push(`- ${r.statement} _(${r.source_evidence})_`);
+          L.push("  ```cobol");
+          r.snippet.forEach((ln) => L.push(`  ${String(ln.line).padStart(4)}  ${ln.text}`));
+          L.push("  ```");
+          const tf = r.typed_fields.filter((f) => f.pic).map((f) => `${f.name} PIC ${f.pic}`);
+          if (tf.length) L.push(`  fields: ${tf.join(", ")}`);
+        });
+        L.push("");
+      }
+    });
+  }
   return L.join("\n");
 }
 
@@ -72,10 +107,13 @@ function groupRules(rules) {
 
 export default function CapabilityRequirements({ name, onOpenProgram, back }) {
   const { data: d, err, loading } = useData(() => api.capabilityRequirements(name), [name]);
+  const [open, setOpen] = useState({});
   if (loading) return <div className="loading">Loading…</div>;
   if (err) return <div className="error">{err}</div>;
 
   const grouped = groupRules(d.business_rules);
+  const specs = d.programs.filter((p) => p.spec);
+  const toggle = (k) => setOpen((o) => ({ ...o, [k]: !o[k] }));
 
   return (
     <div>
@@ -171,6 +209,89 @@ export default function CapabilityRequirements({ name, onOpenProgram, back }) {
           </div>
         ))}
       </div>
+
+      {/* ---- Developer detail (re-implementation spec) ---- */}
+      {specs.length > 0 && (
+        <div className="panel" style={{ marginTop: 16 }}>
+          <h3>Developer detail <span className="tag" style={{ marginLeft: 8 }}>re-implementation spec · source-cited</span></h3>
+          <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>
+            Data layouts, procedure pseudocode, the I/O contract, and each rule with its real
+            code snippet + typed fields — enough to faithfully re-implement each program.
+          </p>
+          {specs.map((p) => {
+            const s = p.spec;
+            const isOpen = !!open[p.program];
+            return (
+              <div key={p.program} className="spec-block">
+                <button className="spec-toggle" onClick={() => toggle(p.program)} aria-expanded={isOpen}>
+                  <span className="spec-caret">{isOpen ? "▾" : "▸"}</span>
+                  <span className="link">{p.program}</span>
+                  <span className="muted"> — {p.role}</span>
+                  <span className="muted spec-meta"> · {s.rules.length} rules · complexity {s.complexity}</span>
+                </button>
+                {isOpen && (
+                  <div className="spec-body">
+                    <div className="spec-sec">
+                      <div className="l">Data structures</div>
+                      {s.data_structures.map((g) => (
+                        <div key={g.section} className="spec-data">
+                          <div className="spec-section-name">{g.section}</div>
+                          {g.items.map((it, i) => (
+                            <div key={i} className="spec-di" style={{ paddingLeft: Math.min(it.level, 12) * 2 }}>
+                              <span className="spec-lvl">{String(it.level).padStart(2, "0")}</span>
+                              <span className="spec-name">{it.name}</span>
+                              {it.pic && <span className="spec-pic">PIC {it.pic}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="spec-sec">
+                      <div className="l">Procedure outline (pseudocode)</div>
+                      {s.procedure_outline.map((o) => (
+                        <div key={o.paragraph} className="spec-para">
+                          <span className="spec-para-name">{o.paragraph}</span>
+                          <span className="spec-steps">{o.steps.map((x) => x.verb).join(" → ") || "—"}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="spec-sec">
+                      <div className="l">I/O contract</div>
+                      <div className="spec-io">
+                        <span>reads: {s.io.reads.join(", ") || "—"}</span>
+                        <span>writes: {s.io.writes.join(", ") || "—"}</span>
+                        <span>copybooks: {s.io.copybooks.join(", ") || "—"}</span>
+                        <span>calls: {s.io.calls.map((c) => c.target).join(", ") || "—"}</span>
+                      </div>
+                    </div>
+
+                    {s.rules.length > 0 && (
+                      <div className="spec-sec">
+                        <div className="l">Rules with code</div>
+                        {s.rules.map((r) => (
+                          <div key={r.id} className="spec-rule">
+                            <div className="spec-rule-stmt">{r.statement}</div>
+                            <pre className="spec-snippet">{r.snippet.map((ln) => `${String(ln.line).padStart(4)}  ${ln.text}`).join("\n")}</pre>
+                            {r.typed_fields.filter((f) => f.pic).length > 0 && (
+                              <div className="spec-fields">
+                                {r.typed_fields.filter((f) => f.pic).map((f) => (
+                                  <span key={f.name} className="pill">{f.name} · PIC {f.pic}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

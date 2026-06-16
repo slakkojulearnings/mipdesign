@@ -13,8 +13,8 @@ Source Code → Inventory → Metadata → Knowledge Graph → Reasoning → Cop
 - **Engine** — `reference-implementation/` (Python 3.13, stdlib-only runtime; optional extras)
 - **Web app** — `app/` (FastAPI API + React/Vite UI)
 - **Your code goes in** — `source_mf_code/` (or point `MIP_SOURCE` anywhere)
-- **Tests** — **90 passing** (engine + graph + parser + app endpoints); advanced ANTLR backend parity **28**
-- **Repo design** — `00-foundation/` … `05-build-plan/`, the 12 skills in `03-skills/`, prompts in `04-prompts/`
+- **Tests** — **97 passing** (engine + graph + parser + spec + app endpoints); advanced ANTLR backend parity **28**
+- **Repo design** — `00-foundation/` … `05-build-plan/`, the 13 skills in `03-skills/`, prompts in `04-prompts/`
 
 For a screen-by-screen tour see [`app/USER_MANUAL.md`](app/USER_MANUAL.md); for leadership-facing
 samples see [`docs/showcase/`](docs/showcase/); fresh-machine steps in [`readme_setup.md`](readme_setup.md).
@@ -63,8 +63,15 @@ uv run uvicorn mip.api:app --port 8000
 ```
 Then open http://localhost:8000 — the API serves the built UI on the same port.
 (Dev mode with hot reload: run `npm run dev` inside `app/frontend` in a second terminal.)
+
+> **Restart after backend changes.** This command does **not** auto-reload, so if you edit
+> Python and the UI starts returning `Method Not Allowed` (405) or `Not Found` (404) on
+> `/api/...` calls, the running process is stale — stop it (Ctrl+C) and start it again, or
+> run with `--reload`: `uv run uvicorn mip.api:app --reload --port 8000`. (Those errors come
+> from the SPA static mount answering routes the old process didn't register.)
 Screens: Dashboard · Programs (search/sort/facets) · Capabilities (→ **Capability Requirements**:
-BR + FR rollup, export to Markdown) · Jobs · **Call Graph** (zoom/pan, confidence slider, edge
+BR + FR rollup, export to Markdown, plus **Developer detail** — data layouts, procedure
+pseudocode, per-rule code snippets + typed fields) · Jobs · **Call Graph** (zoom/pan, confidence slider, edge
 filter, clickable edges with evidence, keyboard/ARIA) · Roots · Dead Code · **Query Console**
 (deep-linkable `#/query?q=…`, logged reasoning) · **Q&A Log** · plus per-program **Sequence
 diagram**, **Field-lineage diagram**, **Impact/blast-radius**, **Business rules**, **Export**
@@ -72,7 +79,10 @@ diagram**, **Field-lineage diagram**, **Impact/blast-radius**, **Business rules*
 
 The top bar shows the active **parser backend** (`default` / `advanced`) and lets you switch it
 — switching re-parses the estate. It reflects `/api/health` and only enables `advanced` when the
-ANTLR backend is installed/built.
+ANTLR backend is installed/built. On clean COBOL both backends agree by design (parity-tested);
+to *see* where advanced differs (COPY … REPLACING expansion), run
+`uv run python scripts/parser_compare.py examples/advanced_parser/CARDADV --copylib examples/advanced_parser`
+(see [ADVANCED_PARSER.md](reference-implementation/ADVANCED_PARSER.md)).
 
 **Render the graph to a standalone file** (the in-app Call Graph already visualizes the same
 NetworkX graph; this is for a slide/export). From `reference-implementation`:
@@ -105,8 +115,8 @@ Set them before the command that uses them — for example, to scan with 8 worke
 
 Run everything (one line at a time). From `reference-implementation`:
 ```
-uv run pytest -q                              # 90 passing
-uv run python ../03-skills/validate_catalog.py   # skills ⇄ catalog in sync (12 skills)
+uv run pytest -q                              # 97 passing
+uv run python ../03-skills/validate_catalog.py   # skills ⇄ catalog in sync (13 skills)
 ```
 Then confirm the UI compiles (from the repo root):
 ```
@@ -125,6 +135,8 @@ Per-capability (each maps to a test you can run on its own):
 | Field-level data lineage (SQL host-var ↔ column) | part of `test_parser.py` + `GET /api/program/STMTDRV/lineage` | `test_parser.py` |
 | Business-rule extraction | `uv run pytest tests/test_rules.py -q` | `test_rules.py` |
 | Capability requirements (BR + FR rollup, triggers, data access) | `uv run pytest tests/test_capability_requirements.py -q` | `test_capability_requirements.py` |
+| Granular developer spec (data layouts by section, procedure pseudocode, code snippets, typed fields) | `uv run pytest tests/test_program_spec.py -q` | `test_program_spec.py` |
+| Default vs ANTLR difference (COPY … REPLACING expansion) | `uv run pytest tests/test_advanced_copy_replacing.py -q` ; `uv run python scripts/parser_compare.py examples/advanced_parser/CARDADV --copylib examples/advanced_parser` | `test_advanced_copy_replacing.py` |
 | Online layer: CICS + CSD transaction→program | `uv run pytest tests/test_cics.py tests/test_csd.py -q` | `test_cics.py`, `test_csd.py` |
 | Runtime-evidence correlation | `uv run pytest tests/test_runtime.py -q` | `test_runtime.py` |
 | Global search | `uv run pytest tests/test_search.py -q` | `test_search.py` |
@@ -133,7 +145,7 @@ Per-capability (each maps to a test you can run on its own):
 | Parallel parsing == serial (180K-scale) | `uv run pytest tests/test_parallel.py -q` | `test_parallel.py` |
 | Scan/insert performance | `uv run pytest tests/test_perf.py -q` ; `uv run python scripts/benchmark_scan.py` | `test_perf.py` |
 
-Smoke-test the API surface (27 endpoints) without the UI. Save this as `smoke.py` in
+Smoke-test the API surface (28 endpoints) without the UI. Save this as `smoke.py` in
 `reference-implementation`, then run `uv run python smoke.py` (works in any shell):
 ```python
 from fastapi.testclient import TestClient
@@ -147,6 +159,7 @@ print("sequence :", c.get("/api/program/AUTHTRAN/sequence").json()["participants
 print("search   :", [(x["kind"], x["id"]) for x in c.get("/api/search?q=AUTH").json()["results"]])
 print("runtime  :", c.get("/api/runtime").json().get("reconciliation", {}).get("summary"))
 print("cap req  :", c.get("/api/capability/CRDPOST/requirements").json()["summary"])
+print("spec     :", {k: (len(v) if isinstance(v, list) else v) for k, v in c.get("/api/program/CRDPOST/spec").json().items()})
 print("parser   :", c.post("/api/parser?mode=default").json()["parser"])
 ```
 
@@ -183,7 +196,7 @@ MIP uses "agents and skills" in **two distinct senses** — the platform's own s
 assets, and the Claude Code agents that *built* it. Both are captured here.
 
 ### 7a. MIP skills (the platform's personas/charters)
-`03-skills/` holds **12 skills** written to the **Agent Skills standard**
+`03-skills/` holds **13 skills** written to the **Agent Skills standard**
 ([agentskills.io](https://agentskills.io/specification)) — each is a folder with a
 `SKILL.md` (`name` + `description` frontmatter). They define *who does what* and the rules
 every contributor (human or AI) follows; the prompts in `04-prompts/` invoke them, and the
@@ -196,7 +209,8 @@ engine implements them.
 - Skill → code, e.g.: `mainframe-code-analyst` → scanner/`cobol_ast`; `graph-engineer` →
   `graphx` (blast radius, PageRank, Louvain); `metadata-modeler`/`sqlite-engineer` →
   `models.py`/`schema.sql`/`store.py`; `business-capability-analyst` → `queries.capabilities`;
-  `resilience-engineer` → dead-code/runtime; `test-engineer` → the test suite.
+  `resilience-engineer` → dead-code/runtime; `test-engineer` → the test suite;
+  `legacy-rewrite-engineer` → `cobol.program_spec` + the capability-requirements bundle.
 - All inherit [`03-skills/MIP_ENGINEERING_PRINCIPLES.md`](03-skills/MIP_ENGINEERING_PRINCIPLES.md)
   (evidence + confidence, graceful degradation, explainability). `03-skills/modernization-leverage/`
   adds common community roles (incl. the Karpathy engineering guidelines that shape `CLAUDE.md`).
@@ -204,7 +218,7 @@ engine implements them.
 ### 7b. Project agents (Claude Code, ship with the repo)
 [`.claude/agents/`](.claude/agents/) defines two subagents available to anyone using Claude
 Code in this repo (also mirrored into `.claude/skills/` so Claude Code auto-discovers the
-12 skills):
+13 skills):
 - **`mip-discovery`** — runs the engine to inventory/graph/root/dead-code/capability-map an
   estate and explain findings with evidence + confidence.
 - **`mip-modernization-architect`** — turns that evidence into an incremental, low-risk
@@ -238,7 +252,7 @@ verifying centrally. Representative waves:
 | [`00-foundation/`](00-foundation/) | philosophy · engineering principles · architecture (+ scale plan) |
 | [`01-metadata-model/`](01-metadata-model/) | entities · relationships · `models.py` · `schema.sql` |
 | [`02-algorithms/`](02-algorithms/) | root / impact / lineage / clustering / confidence pseudocode |
-| [`03-skills/`](03-skills/) | 12 skills + `skills.catalog.json` + `validate_catalog.py` + principles |
+| [`03-skills/`](03-skills/) | 13 skills + `skills.catalog.json` + `validate_catalog.py` + principles |
 | [`04-prompts/`](04-prompts/) | V2 prompt library + community modernization prompts |
 | [`05-build-plan/`](05-build-plan/) | the v0.1 vertical-slice plan |
 | [`reference-implementation/`](reference-implementation/) | the engine, `sample_estate/`, tests, `scripts/`, `ADVANCED_PARSER.md` |

@@ -56,7 +56,7 @@ green run is the definition of done, not a confident-sounding summary.
 - `00-foundation/` — philosophy, principles, architecture (+ honest scale plan)
 - `01-metadata-model/` — `ENTITIES.md`, `RELATIONSHIPS.md`, `models.py`, `schema.sql`
 - `02-algorithms/` — concrete pseudocode for root/impact/lineage/clustering
-- `03-skills/` — the 12 canonical skills + `MIP_ENGINEERING_PRINCIPLES.md` + `modernization-leverage/`
+- `03-skills/` — the 13 canonical skills + `MIP_ENGINEERING_PRINCIPLES.md` + `modernization-leverage/`
 - `04-prompts/` — canonical V2 prompt library + `community/` modernization prompts
 - `05-build-plan/` — the v0.1 vertical-slice plan
 - `reference-implementation/` — runnable Python v0.1 + `sample_estate/` + tests

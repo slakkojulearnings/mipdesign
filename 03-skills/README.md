@@ -32,7 +32,7 @@ python validate_catalog.py        # checks frontmatter + name==folder + catalog 
 - Each catalog entry lists the **prompts** and **tools/api** for that skill.
 - `validate_catalog.py` guarantees folders ⇄ catalog stay 1:1.
 
-## The 12 skills
+## The 13 skills
 
 | Skill | Category | Status |
 |-------|----------|--------|
@@ -44,6 +44,7 @@ python validate_catalog.py        # checks frontmatter + name==folder + catalog 
 | resilience-engineer | intelligence | partial |
 | security-compliance-analyst | intelligence | specified |
 | mainframe-modernization-architect | modernization | specified |
+| legacy-rewrite-engineer | modernization | partial |
 | test-engineer | platform | implemented |
 | documentation-writer | platform | implemented |
 | repository-engineer | platform | implemented |

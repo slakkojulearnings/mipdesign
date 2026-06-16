@@ -61,6 +61,13 @@
       "note": "Copilot/Modernization layer; consumes the graph once built."
     },
     {
+      "name": "legacy-rewrite-engineer", "category": "modernization", "status": "partial",
+      "prompts": ["community/REWRITE_FROM_REQUIREMENTS.md"],
+      "tools": ["reference-implementation/src/mip/cobol.py#program_spec", "reference-implementation/src/mip/queries.py#capability_detail"],
+      "api": ["GET /api/capability/{name}/requirements", "GET /api/program/{id}/spec"],
+      "note": "v0.1 engine produces the evidence-rich requirements + per-program developer spec (data layouts, procedure pseudocode, I/O, rules with source snippets + typed fields); the target-language code drafting is the grounded LLM step via the owning prompt."
+    },
+    {
       "name": "test-engineer", "category": "platform", "status": "implemented",
       "prompts": [],
       "tools": ["reference-implementation/tests/test_groundtruth.py"],

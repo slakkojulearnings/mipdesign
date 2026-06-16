@@ -205,6 +205,25 @@ def get_rules(pid: str) -> dict:
     return {"program_id": pid, "rules": cobol.business_rules(text, pid, row["src"])}
 
 
+@app.get("/api/program/{pid}/spec")
+def get_spec(pid: str) -> dict:
+    """Granular developer spec: data structures (by section), procedure outline (pseudocode),
+    I/O contract, and business rules with real source snippets + typed fields. Detailed
+    enough to re-implement the program; every fact is source-cited."""
+    _ensure_scanned()
+    conn = _conn()
+    pid = pid.upper()
+    row = conn.execute(
+        "SELECT a.path AS src FROM program p JOIN artifact a ON a.artifact_id=p.artifact_id"
+        " WHERE p.program_id=?", (pid,)).fetchone()
+    conn.close()
+    if not row or not row["src"]:
+        raise HTTPException(404, f"program not found or has no source: {pid}")
+    target = _state["source"] / row["src"]
+    text = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else ""
+    return cobol.program_spec(text, pid, row["src"])
+
+
 @app.get("/api/jobs")
 def get_jobs() -> list[dict]:
     _ensure_scanned()
@@ -297,13 +316,14 @@ def get_capability_requirements(name: str) -> dict:
     rules, fields = [], []
     for p in detail["programs"]:
         src = p.get("source_path")
-        if not src:
-            continue
-        target = _state["source"] / src
-        if not target.is_file():
+        target = (_state["source"] / src) if src else None
+        if not target or not target.is_file():
+            p["spec"] = None
             continue
         text = target.read_text(encoding="utf-8", errors="replace")
-        rules.extend(cobol.business_rules(text, p["program"], src))
+        spec = cobol.program_spec(text, p["program"], src)   # granular developer detail
+        p["spec"] = spec
+        rules.extend(spec["rules"])
         fields.extend(cobol.field_lineage(text, p["program"], src))
 
     detail["business_rules"] = rules
