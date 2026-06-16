@@ -13,7 +13,7 @@ Source Code → Inventory → Metadata → Knowledge Graph → Reasoning → Cop
 - **Engine** — `reference-implementation/` (Python 3.13, stdlib-only runtime; optional extras)
 - **Web app** — `app/` (FastAPI API + React/Vite UI)
 - **Your code goes in** — `source_mf_code/` (or point `MIP_SOURCE` anywhere)
-- **Tests** — **101 passing** (engine + graph + parser + spec + app endpoints); advanced ANTLR backend parity **28**
+- **Tests** — **108 passing** (engine + graph + parser + spec + trace + app endpoints); advanced ANTLR backend parity **28**
 - **Repo design** — `00-foundation/` … `05-build-plan/`, the 13 skills in `03-skills/`, prompts in `04-prompts/`
 
 For a screen-by-screen tour see [`app/USER_MANUAL.md`](app/USER_MANUAL.md); for leadership-facing
@@ -75,8 +75,9 @@ rootless/orphan; → **Capability Requirements**: BR + FR rollup, export to Mark
 fields) · Jobs · **Call Graph** (zoom/pan, confidence slider, edge
 filter, clickable edges with evidence, keyboard/ARIA) · Roots · Dead Code · **Query Console**
 (deep-linkable `#/query?q=…`, logged reasoning) · **Q&A Log** · plus per-program **Sequence
-diagram**, **Field-lineage diagram**, **Impact/blast-radius**, **Business rules**, **Export**
-(JSON/CSV/GraphML) and click-to-evidence drill-down.
+diagram**, **Field-lineage diagram**, **Impact/blast-radius**, **Call Trace** (full upstream +
+downstream incl. DB tables/copybooks, evidence per hop, tree + subgraph + Markdown export),
+**Business rules**, **Export** (JSON/CSV/GraphML) and click-to-evidence drill-down.
 
 The top bar shows the active **parser backend** (`default` / `advanced`) and lets you switch it
 — switching re-parses the estate. It reflects `/api/health` and only enables `advanced` when the
@@ -118,7 +119,7 @@ Set them before the command that uses them — for example, to scan with 8 worke
 
 Run everything (one line at a time). From `reference-implementation`:
 ```
-uv run pytest -q                              # 101 passing
+uv run pytest -q                              # 108 passing
 uv run python ../03-skills/validate_catalog.py   # skills ⇄ catalog in sync (13 skills)
 ```
 Then confirm the UI compiles (from the repo root):
@@ -139,6 +140,7 @@ Per-capability (each maps to a test you can run on its own):
 | Business-rule extraction | `uv run pytest tests/test_rules.py -q` | `test_rules.py` |
 | Capability requirements (BR + FR rollup, triggers, data access) | `uv run pytest tests/test_capability_requirements.py -q` | `test_capability_requirements.py` |
 | Granular developer spec (data layouts by section, procedure pseudocode, code snippets, typed fields) | `uv run pytest tests/test_program_spec.py -q` | `test_program_spec.py` |
+| Call trace (upstream + downstream, incl. DB tables/copybooks, evidence per hop) | `uv run pytest tests/test_trace.py -q` | `test_trace.py` |
 | Default vs ANTLR difference (COPY … REPLACING expansion) | `uv run pytest tests/test_advanced_copy_replacing.py -q` ; `uv run python scripts/parser_compare.py examples/advanced_parser/CARDADV --copylib examples/advanced_parser` | `test_advanced_copy_replacing.py` |
 | Online layer: CICS + CSD transaction→program | `uv run pytest tests/test_cics.py tests/test_csd.py -q` | `test_cics.py`, `test_csd.py` |
 | Runtime-evidence correlation | `uv run pytest tests/test_runtime.py -q` | `test_runtime.py` |
@@ -148,7 +150,7 @@ Per-capability (each maps to a test you can run on its own):
 | Parallel parsing == serial (180K-scale) | `uv run pytest tests/test_parallel.py -q` | `test_parallel.py` |
 | Scan/insert performance | `uv run pytest tests/test_perf.py -q` ; `uv run python scripts/benchmark_scan.py` | `test_perf.py` |
 
-Smoke-test the API surface (28 endpoints) without the UI. Save this as `smoke.py` in
+Smoke-test the API surface (29 endpoints) without the UI. Save this as `smoke.py` in
 `reference-implementation`, then run `uv run python smoke.py` (works in any shell):
 ```python
 from fastapi.testclient import TestClient
@@ -163,6 +165,8 @@ print("search   :", [(x["kind"], x["id"]) for x in c.get("/api/search?q=AUTH").j
 print("runtime  :", c.get("/api/runtime").json().get("reconciliation", {}).get("summary"))
 print("cap req  :", c.get("/api/capability/CRDPOST/requirements").json()["summary"])
 print("spec     :", {k: (len(v) if isinstance(v, list) else v) for k, v in c.get("/api/program/CRDPOST/spec").json().items()})
+tr = c.get("/api/program/CRDPOST/trace").json()
+print("trace    :", tr["stats"], "db:", tr["db_touchpoints"])
 print("parser   :", c.post("/api/parser?mode=default").json()["parser"])
 ```
 

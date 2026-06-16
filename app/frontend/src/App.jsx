@@ -18,6 +18,7 @@ import QueryConsole from "./components/QueryConsole.jsx";
 import CallGraph from "./components/CallGraph.jsx";
 import Capabilities from "./components/Capabilities.jsx";
 import CapabilityRequirements from "./components/CapabilityRequirements.jsx";
+import CallTrace from "./components/CallTrace.jsx";
 import QaLog from "./components/QaLog.jsx";
 import GlobalSearch from "./components/GlobalSearch.jsx";
 import ExportMenu from "./components/ExportMenu.jsx";
@@ -75,6 +76,12 @@ function CapabilityRequirementsRoute() {
   const { name } = useParams();
   const { openProgram, go } = useNav();
   return <CapabilityRequirements name={name} onOpenProgram={openProgram} back={() => go("capabilities")} />;
+}
+function CallTraceRoute() {
+  const { pid } = useParams();
+  const navigate = useNavigate();
+  const { openProgram } = useNav();
+  return <CallTrace pid={pid} onOpenProgram={openProgram} back={() => navigate(-1)} />;
 }
 function RootsRoute() {
   const { openProgram } = useNav();
@@ -207,6 +214,7 @@ function Layout() {
           <Route path="/program/:pid" element={<ProgramDetailRoute />} />
           <Route path="/capabilities" element={<CapabilitiesRoute />} />
           <Route path="/capability/:name" element={<CapabilityRequirementsRoute />} />
+          <Route path="/trace/:pid" element={<CallTraceRoute />} />
           <Route path="/jobs" element={<JobsRoute />} />
           <Route path="/graph" element={<CallGraphRoute />} />
           <Route path="/roots" element={<RootsRoute />} />

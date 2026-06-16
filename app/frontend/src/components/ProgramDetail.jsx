@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import { useData } from "../hooks.js";
 import ProfileCard from "./ProfileCard.jsx";
@@ -61,6 +62,7 @@ function EvidenceModal({ evidence, onClose }) {
 }
 
 export default function ProgramDetail({ pid, onOpenProgram, back }) {
+  const navigate = useNavigate();
   const { data, err, loading } = useData(() => api.profile(pid), [pid]);
   const [src, setSrc] = useState(null);
   const [srcErr, setSrcErr] = useState(null);
@@ -111,7 +113,12 @@ export default function ProgramDetail({ pid, onOpenProgram, back }) {
   return (
     <div>
       <p><span className="link" onClick={back}>← Programs</span></p>
-      <h1 className="page-title">{d.program_id} {d.capability && <span className="badge ok">{d.capability}</span>}</h1>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <h1 className="page-title" style={{ margin: 0 }}>{d.program_id} {d.capability && <span className="badge ok">{d.capability}</span>}</h1>
+        <button className="btn secondary" onClick={() => navigate(`/trace/${encodeURIComponent(d.program_id)}`)}>
+          Call trace (up + down) →
+        </button>
+      </div>
 
       <div className="insights">
         <Insight l="Complexity (proxy)" cls={cxCls} v={cx} />

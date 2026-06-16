@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import { useData } from "../hooks.js";
 import ProfileCard from "./ProfileCard.jsx";
@@ -50,6 +51,7 @@ function Insight({ l, v, cls }) {
 }
 
 export default function CallGraph({ onOpenProgram }) {
+  const navigate = useNavigate();
   const { data, err, loading } = useData(() => api.graph());
   const [sel, setSel] = useState(null);        // {type:'node'|'edge', ...}
   const [profile, setProfile] = useState(null);
@@ -402,8 +404,12 @@ export default function CallGraph({ onOpenProgram }) {
                       <div className="l">Structure / AST</div>
                       <Structure structure={profile.structure} />
                     </div>
-                    <button className="btn secondary" style={{ marginTop: 12 }}
-                            onClick={() => onOpenProgram(sel.node.id)}>Open full page →</button>
+                    <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                      <button className="btn secondary"
+                              onClick={() => onOpenProgram(sel.node.id)}>Open full page →</button>
+                      <button className="btn secondary"
+                              onClick={() => navigate(`/trace/${encodeURIComponent(sel.node.id)}`)}>Call trace ↗</button>
+                    </div>
                   </>
                 ) : <div className="loading">Loading profile…</div>
               ) : (

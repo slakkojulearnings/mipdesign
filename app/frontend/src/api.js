@@ -12,6 +12,8 @@ export const api = {
   program: (pid) => fetch(`/api/program/${encodeURIComponent(pid)}`).then(j),
   profile: (pid) => fetch(`/api/program/${encodeURIComponent(pid)}/profile`).then(j),
   impact: (pid) => fetch(`/api/program/${encodeURIComponent(pid)}/impact`).then(j),
+  trace: (pid, { direction = "both", depth = 8, includeData = true } = {}) =>
+    fetch(`/api/program/${encodeURIComponent(pid)}/trace?direction=${direction}&depth=${depth}&include_data=${includeData}`).then(j),
   lineage: (pid) => fetch(`/api/program/${encodeURIComponent(pid)}/lineage`).then(j),
   sequence: (pid) => fetch("/api/program/" + encodeURIComponent(pid) + "/sequence").then(j),
   exportUrl: (format, kind) => `/api/export?format=${format}` + (kind ? `&kind=${kind}` : ""),

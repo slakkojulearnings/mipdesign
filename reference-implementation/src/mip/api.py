@@ -205,6 +205,21 @@ def get_rules(pid: str) -> dict:
     return {"program_id": pid, "rules": cobol.business_rules(text, pid, row["src"])}
 
 
+@app.get("/api/program/{pid}/trace")
+def get_trace(pid: str, direction: str = Query(default="both"),
+              depth: int = Query(default=8), include_data: bool = Query(default=True)) -> dict:
+    """Complete call trace for a program — upstream (who triggers it) and downstream (what it
+    calls + the DB tables/copybooks it touches), as a tree + a flat graph, each hop carrying
+    evidence (file:line) and confidence. Unresolved/dynamic branches are kept and flagged."""
+    _ensure_scanned()
+    conn = _conn()
+    out = queries.trace(conn, pid.upper(), direction=direction, depth=depth, include_data=include_data)
+    conn.close()
+    if not out["found"]:
+        raise HTTPException(404, f"program not found: {pid}")
+    return out
+
+
 @app.get("/api/program/{pid}/spec")
 def get_spec(pid: str) -> dict:
     """Granular developer spec: data structures (by section), procedure outline (pseudocode),

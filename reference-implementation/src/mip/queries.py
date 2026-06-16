@@ -150,6 +150,117 @@ def call_graph(conn: sqlite3.Connection) -> dict:
     return {"nodes": list(nodes.values()), "edges": edges}
 
 
+def trace(conn: sqlite3.Connection, program: str, direction: str = "both",
+          depth: int = 8, include_data: bool = True) -> dict:
+    """Complete bidirectional call trace for a program.
+
+    upstream   = who triggers it (reverse CALLS/EXECUTES/STARTS up to jobs/transactions)
+    downstream = what it calls (CALLS) + the data it touches (READS/WRITES tables, USES
+                 copybooks) when include_data is set.
+
+    Returns BOTH a nested tree (per direction) and a flat node/edge list (for a graph view),
+    with per-hop evidence (file:line) + confidence + validation_status. Dynamic/unresolved
+    branches are kept and flagged (never dropped); cycles render as DAG nodes marked
+    `repeated`. Confidence is per-edge; a path is only as strong as its weakest hop."""
+    program = program.upper()
+    control = ("CALLS", "EXECUTES", "STARTS")
+    data = ("READS", "WRITES", "USES")
+    rels = list(control) + (list(data) if include_data else [])
+    ph = ",".join("?" * len(rels))
+
+    fwd: dict[str, list] = {}
+    rev: dict[str, list] = {}
+    kind: dict[str, str] = {}
+    for r in conn.execute(
+        f"SELECT source_id, source_type, rel_type, target_id, target_type, confidence,"
+        f" validation_status, source_evidence, discovery_method"
+        f" FROM relationship WHERE rel_type IN ({ph})", rels):
+        kind.setdefault(r["source_id"], r["source_type"])
+        kind.setdefault(r["target_id"], r["target_type"])
+        edge = {"rel": r["rel_type"], "confidence": r["confidence"],
+                "validation_status": r["validation_status"],
+                "evidence": r["source_evidence"], "method": r["discovery_method"]}
+        fwd.setdefault(r["source_id"], []).append((r["target_id"], r["target_type"], edge))
+        rev.setdefault(r["target_id"], []).append((r["source_id"], r["source_type"], edge))
+
+    programs = {row["program_id"] for row in conn.execute("SELECT program_id FROM program")}
+    if program in programs:
+        kind[program] = "program"
+    found = program in kind
+
+    nodes: dict[str, str] = {}
+    edge_keys: set = set()
+    flat_edges: list[dict] = []
+
+    def note(nid, k):
+        nodes.setdefault(nid, k or kind.get(nid, "program"))
+
+    def add_edge(src, tgt, tag, edge):
+        key = (src, tgt, edge["rel"], tag)
+        if key not in edge_keys:
+            edge_keys.add(key)
+            flat_edges.append({"source": src, "target": tgt, "direction": tag, **edge})
+
+    note(program, kind.get(program, "program"))
+
+    down_seen: set = set()
+    def go_down(nid, d):
+        node = {"id": nid, "kind": nodes.get(nid, kind.get(nid, "program")), "repeated": False, "children": []}
+        if d <= 0:
+            return node
+        if nid in down_seen:
+            node["repeated"] = True
+            return node
+        down_seen.add(nid)
+        for tgt, ttype, edge in sorted(fwd.get(nid, []), key=lambda e: (e[2]["rel"], e[0])):
+            note(tgt, ttype)
+            add_edge(nid, tgt, "down", edge)
+            child = (go_down(tgt, d - 1) if edge["rel"] == "CALLS"
+                     else {"id": tgt, "kind": ttype, "repeated": False, "children": [], "leaf": True})
+            node["children"].append({**edge, "node": child})
+        return node
+
+    up_seen: set = set()
+    def go_up(nid, d):
+        node = {"id": nid, "kind": nodes.get(nid, kind.get(nid, "program")), "repeated": False, "children": []}
+        if d <= 0:
+            return node
+        if nid in up_seen:
+            node["repeated"] = True
+            return node
+        up_seen.add(nid)
+        for src, stype, edge in sorted(rev.get(nid, []), key=lambda e: (e[2]["rel"], e[0])):
+            if edge["rel"] not in control:           # upstream is control-flow only
+                continue
+            note(src, stype)
+            add_edge(src, nid, "up", edge)
+            child = (go_up(src, d - 1) if stype == "program"
+                     else {"id": src, "kind": stype, "repeated": False, "children": [], "leaf": True})
+            node["children"].append({**edge, "node": child})
+        return node
+
+    downstream = go_down(program, depth) if direction in ("both", "down") else None
+    upstream = go_up(program, depth) if direction in ("both", "up") else None
+
+    unresolved = [e for e in flat_edges if e["validation_status"] != "confirmed"]
+    return {
+        "program": program, "found": found, "kind": kind.get(program, "program"),
+        "direction": direction, "depth": depth, "include_data": include_data,
+        "upstream": upstream, "downstream": downstream,
+        "nodes": [{"id": k, "kind": v} for k, v in sorted(nodes.items())],
+        "edges": flat_edges,
+        "db_touchpoints": {
+            "reads": sorted({e["target"] for e in flat_edges if e["rel"] == "READS"}),
+            "writes": sorted({e["target"] for e in flat_edges if e["rel"] == "WRITES"}),
+        },
+        "stats": {"node_count": len(nodes), "edge_count": len(flat_edges),
+                  "unresolved_count": len(unresolved),
+                  "unresolved": [{"source": e["source"], "target": e["target"],
+                                  "rel": e["rel"], "validation_status": e["validation_status"]}
+                                 for e in unresolved]},
+    }
+
+
 def summary(conn: sqlite3.Connection) -> dict:
     def scalar(sql: str) -> int:
         return conn.execute(sql).fetchone()[0]
