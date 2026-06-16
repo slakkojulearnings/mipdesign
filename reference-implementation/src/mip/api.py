@@ -279,6 +279,64 @@ def get_capabilities() -> list[dict]:
     return out
 
 
+@app.get("/api/capability/{name}/requirements")
+def get_capability_requirements(name: str) -> dict:
+    """Aggregated business + functional requirements for one capability.
+
+    FR = triggers, member programs & roles, data touched (tables/access, copybooks).
+    BR = every business rule extracted across the member programs (each citing file:line).
+    Conditions/line numbers are confirmed; classifications, plain-English statements, and
+    the capability grouping itself are inferred — see `disclaimer`."""
+    _ensure_scanned()
+    conn = _conn()
+    detail = queries.capability_detail(conn, name)
+    conn.close()
+    if detail is None:
+        raise HTTPException(404, f"capability not found: {name}")
+
+    rules, fields = [], []
+    for p in detail["programs"]:
+        src = p.get("source_path")
+        if not src:
+            continue
+        target = _state["source"] / src
+        if not target.is_file():
+            continue
+        text = target.read_text(encoding="utf-8", errors="replace")
+        rules.extend(cobol.business_rules(text, p["program"], src))
+        fields.extend(cobol.field_lineage(text, p["program"], src))
+
+    detail["business_rules"] = rules
+    detail["field_flows"] = fields
+    detail["summary"] = {
+        "program_count": len(detail["programs"]),
+        "rule_count": len(rules),
+        "table_count": len(detail["tables"]),
+        "trigger_count": len(detail["triggers"]),
+    }
+    detail["disclaimer"] = (
+        "Reverse-engineered from source code: these requirements describe the system's "
+        "implemented behavior, not its original intent. Rule conditions cite real source "
+        "lines (confirmed); rule classifications, plain-English statements, and the "
+        "capability grouping are inferred — review before relying on them.")
+    return detail
+
+
+@app.post("/api/parser")
+def set_parser(mode: str = Query(...)) -> dict:
+    """Switch the active COBOL parser backend (`default` | `advanced`) and re-scan so the
+    new backend is reflected everywhere. If `advanced` is requested but its ANTLR runtime/
+    grammar isn't installed, the engine stays on `default` — see `parser.effective`."""
+    mode = mode.strip().lower()
+    if mode not in ("default", "advanced"):
+        raise HTTPException(400, "mode must be 'default' or 'advanced'")
+    os.environ["MIP_PARSER"] = mode
+    rescanned = _state["source"].exists()
+    if rescanned:
+        build_db(_state["source"], _DB_PATH)
+    return {"parser": parser_backend.backend_info(), "rescanned": rescanned}
+
+
 @app.get("/api/insights")
 def get_insights() -> dict:
     _ensure_scanned()

@@ -20,6 +20,9 @@ export const api = {
   deadcode: () => fetch("/api/deadcode").then(j),
   graph: () => fetch("/api/graph").then(j),
   capabilities: () => fetch("/api/capabilities").then(j),
+  capabilityRequirements: (name) =>
+    fetch(`/api/capability/${encodeURIComponent(name)}/requirements`).then(j),
+  setParser: (mode) => fetch(`/api/parser?mode=${encodeURIComponent(mode)}`, { method: "POST" }).then(j),
   communities: () => fetch("/api/communities").then(j),
   insights: () => fetch("/api/insights").then(j),
   query: (question) =>

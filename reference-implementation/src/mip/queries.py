@@ -137,13 +137,16 @@ def call_graph(conn: sqlite3.Connection) -> dict:
 
     edges = []
     for r in conn.execute(
-        "SELECT source_id, target_id, rel_type, validation_status, confidence"
+        "SELECT source_id, target_id, rel_type, validation_status, confidence,"
+        " source_evidence, discovery_method"
         " FROM relationship WHERE rel_type IN ('CALLS','EXECUTES') ORDER BY source_id"):
         # target may be an unresolved/dynamic program name not in the program table
         add(r["target_id"], "program" if r["rel_type"] == "CALLS" else "program")
         edges.append({"source": r["source_id"], "target": r["target_id"],
                       "rel_type": r["rel_type"], "validation_status": r["validation_status"],
-                      "confidence": r["confidence"]})
+                      "confidence": r["confidence"],
+                      "source_evidence": r["source_evidence"],
+                      "discovery_method": r["discovery_method"]})
     return {"nodes": list(nodes.values()), "edges": edges}
 
 
@@ -239,6 +242,59 @@ def capabilities(conn: sqlite3.Connection) -> list[dict]:
                        f"capability name derived from naming conventions — review recommended."),
         })
     return caps
+
+
+def capability_detail(conn: sqlite3.Connection, name: str) -> dict | None:
+    """Structural requirements skeleton for one capability (matched by name or root).
+
+    Returns the functional-requirement structure — triggers, member programs + roles,
+    and the data each touches (tables with access direction, copybooks). Business rules
+    and field flows are layered on in the API (they need the source text). None if no
+    capability matches. Everything stays `inferred` (the capability itself is inferred)."""
+    key = name.strip().lower()
+    cap = next((c for c in capabilities(conn)
+                if c["capability"].lower() == key or c["root"].lower() == key), None)
+    if cap is None:
+        return None
+    root = cap["root"]
+
+    # triggers: batch jobs that EXECUTE the root + online transactions that START it
+    triggers = [{"type": "batch job", "id": j} for j in cap["jobs"]]
+    for r in conn.execute(
+        "SELECT source_id FROM relationship WHERE rel_type='STARTS' AND target_id=?", (root,)):
+        triggers.append({"type": "online transaction (CICS)", "id": r["source_id"]})
+
+    # member programs: role, size, source path, and what each one calls
+    programs = []
+    for m in cap["programs"]:
+        row = conn.execute(
+            "SELECT p.line_count, a.path AS src FROM program p"
+            " LEFT JOIN artifact a ON a.artifact_id=p.artifact_id WHERE p.program_id=?", (m,)).fetchone()
+        calls = [c["target_id"] for c in conn.execute(
+            "SELECT target_id FROM relationship WHERE source_id=? AND rel_type='CALLS' ORDER BY target_id", (m,))]
+        programs.append({"program": m, "role": _label(m),
+                         "line_count": row["line_count"] if row else None,
+                         "source_path": row["src"] if row else None,
+                         "calls": calls})
+
+    # data: tables (with access direction) + copybooks across all members
+    access: dict[str, set] = {}
+    copybooks: set[str] = set()
+    for m in cap["programs"]:
+        for r in conn.execute("SELECT rel_type, target_id FROM relationship WHERE source_id=?", (m,)):
+            if r["rel_type"] in ("READS", "WRITES"):
+                access.setdefault(r["target_id"], set()).add(r["rel_type"])
+            elif r["rel_type"] == "USES":
+                copybooks.add(r["target_id"])
+    tables = [{"table": t, "access": sorted(a)} for t, a in sorted(access.items())]
+
+    return {
+        "capability": cap["capability"], "root": root,
+        "confidence": cap["confidence"], "validation_status": cap["validation_status"],
+        "reason": cap["reason"],
+        "triggers": triggers, "programs": programs,
+        "tables": tables, "copybooks": sorted(copybooks),
+    }
 
 
 def program_profile(conn: sqlite3.Connection, program: str) -> dict:

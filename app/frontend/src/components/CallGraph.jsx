@@ -119,6 +119,8 @@ export default function CallGraph({ onOpenProgram }) {
       if (c < threshold) { hiddenByConf++; return false; }
       return true;
     });
+  // show per-edge labels only when the graph is small enough to stay legible
+  const showEdgeLabels = visibleEdges.length <= 160;
 
   // --- zoom / pan helpers ---
   const clientToSvg = (clientX, clientY) => {
@@ -148,19 +150,26 @@ export default function CallGraph({ onOpenProgram }) {
   const onPointerDown = (ev) => {
     if (ev.button !== 0) return;
     moved.current = false;
-    drag.current = { x: ev.clientX, y: ev.clientY, vx: vb.x, vy: vb.y };
-    svgRef.current.setPointerCapture?.(ev.pointerId);
+    // Do NOT capture the pointer here. Capturing on pointerdown makes the browser
+    // retarget the following `click` to the <svg> (Pointer Events L3), so node/edge
+    // onClick never fires. We capture lazily once a real drag begins (see onPointerMove).
+    drag.current = { x: ev.clientX, y: ev.clientY, vx: vb.x, vy: vb.y, id: ev.pointerId, captured: false };
   };
   const onPointerMove = (ev) => {
     if (!drag.current) return;
     const r = svgRef.current.getBoundingClientRect();
-    const dx = ((ev.clientX - drag.current.x) / r.width) * vb.w;
-    const dy = ((ev.clientY - drag.current.y) / r.height) * vb.h;
-    if (Math.abs(ev.clientX - drag.current.x) + Math.abs(ev.clientY - drag.current.y) > 4) moved.current = true;
+    const dxPix = ev.clientX - drag.current.x, dyPix = ev.clientY - drag.current.y;
+    if (!moved.current && Math.abs(dxPix) + Math.abs(dyPix) > 4) {
+      moved.current = true;                       // crossed threshold → this is a pan, not a click
+      svgRef.current.setPointerCapture?.(drag.current.id);  // capture now so dragging stays smooth
+      drag.current.captured = true;
+    }
+    if (!moved.current) return;                   // below threshold → keep node/edge clicks intact
+    const dx = (dxPix / r.width) * vb.w, dy = (dyPix / r.height) * vb.h;
     setView((v) => ({ ...(v || vb), x: drag.current.vx - dx, y: drag.current.vy - dy }));
   };
   const endPan = (ev) => {
-    if (drag.current) svgRef.current.releasePointerCapture?.(ev.pointerId);
+    if (drag.current?.captured) svgRef.current.releasePointerCapture?.(ev.pointerId);
     drag.current = null;
   };
   const reset = () => setView({ x: 0, y: 0, w: baseW, h: baseH });
@@ -293,13 +302,24 @@ export default function CallGraph({ onOpenProgram }) {
               if (!a || !b) return null;
               const review = e.validation_status !== "confirmed";
               const on = sel?.type === "edge" && sel.i === i;
+              const x1 = a.x + NW, y1 = a.y + NH / 2, x2 = b.x, y2 = b.y + NH / 2;
+              const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+              const selectEdge = () => { if (!moved.current) setSel({ type: "edge", edge: e, i }); };
               return (
-                <line key={i} x1={a.x + NW} y1={a.y + NH / 2} x2={b.x} y2={b.y + NH / 2}
-                  stroke={on ? "var(--text)" : review ? "var(--amber)" : "#5b6b7d"}
-                  strokeWidth={on ? 3 : 1.6} strokeDasharray={review ? "4 3" : "0"}
-                  markerEnd={review ? "url(#arrow-rev)" : "url(#arrow)"}
-                  style={{ cursor: "pointer" }}
-                  onClick={() => { if (!moved.current) setSel({ type: "edge", edge: e, i }); }} />
+                <g key={i} className="cg-edge" onClick={selectEdge} style={{ cursor: "pointer" }}>
+                  {/* wide transparent hit area so thin edges are easy to click */}
+                  <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth="14" />
+                  <line x1={x1} y1={y1} x2={x2} y2={y2}
+                    stroke={on ? "var(--text)" : review ? "var(--amber)" : "#5b6b7d"}
+                    strokeWidth={on ? 3 : 1.6} strokeDasharray={review ? "4 3" : "0"}
+                    markerEnd={review ? "url(#arrow-rev)" : "url(#arrow)"} />
+                  {showEdgeLabels && (
+                    <text className="cg-edge-label" x={mx} y={my - 4} textAnchor="middle"
+                      fill={on ? "var(--text)" : review ? "var(--amber)" : "var(--muted)"}>
+                      {e.rel_type}{e.confidence != null && e.confidence < 1 ? ` ${e.confidence}` : ""}
+                    </text>
+                  )}
+                </g>
               );
             })}
 
@@ -354,6 +374,10 @@ export default function CallGraph({ onOpenProgram }) {
                   {sel.edge.validation_status === "confirmed"
                     ? <span className="badge ok">confirmed</span>
                     : <span className="badge review">{sel.edge.validation_status}</span>}</div>
+                {sel.edge.discovery_method &&
+                  <div><span>Method</span>{sel.edge.discovery_method}</div>}
+                {sel.edge.source_evidence &&
+                  <div><span>Evidence</span><code>{sel.edge.source_evidence}</code></div>}
               </div>
               {sel.edge.validation_status !== "confirmed" &&
                 <p className="muted" style={{ fontSize: 12 }}>Dynamic/unresolved target — kept and flagged, not asserted.</p>}

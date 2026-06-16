@@ -1,8 +1,10 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import { useData } from "../hooks.js";
 
 export default function Capabilities({ onOpenProgram }) {
+  const navigate = useNavigate();
   const { data, err, loading } = useData(() => api.capabilities());
   const { data: comm } = useData(() => api.communities());
   if (loading) return <div className="loading">Loading…</div>;
@@ -73,6 +75,10 @@ export default function Capabilities({ onOpenProgram }) {
               </div>
             )}
             <div className="cap-sec muted" style={{ fontSize: 12 }}>{c.reason}</div>
+            <button className="btn secondary" style={{ marginTop: 10 }}
+                    onClick={() => navigate(`/capability/${encodeURIComponent(c.root)}`)}>
+              View requirements (BR + FR) →
+            </button>
           </div>
         ))}
       </div>

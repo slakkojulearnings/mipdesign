@@ -44,6 +44,19 @@
 .cg-types label { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; }
 .cg-types input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 
+/* edge labels — small, muted, with a white halo so they stay legible over lines */
+.cg-edge-label {
+  font-size: 9.5px;
+  font-family: ui-monospace, Consolas, monospace;
+  paint-order: stroke;
+  stroke: var(--panel, #fff);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;   /* label never blocks the edge hit area */
+  user-select: none;
+}
+.cg-edge:hover .cg-edge-label { fill: var(--text); }
+
 /* keyboard / pointer affordances on the SVG canvas */
 .cg-svg { display: block; touch-action: none; }
 .cg-svg.panning { cursor: grabbing; }

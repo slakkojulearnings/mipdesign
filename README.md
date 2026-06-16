@@ -13,7 +13,7 @@ Source Code → Inventory → Metadata → Knowledge Graph → Reasoning → Cop
 - **Engine** — `reference-implementation/` (Python 3.13, stdlib-only runtime; optional extras)
 - **Web app** — `app/` (FastAPI API + React/Vite UI)
 - **Your code goes in** — `source_mf_code/` (or point `MIP_SOURCE` anywhere)
-- **Tests** — **84 passing** (engine + graph + parser + app endpoints); advanced ANTLR backend parity **28**
+- **Tests** — **90 passing** (engine + graph + parser + app endpoints); advanced ANTLR backend parity **28**
 - **Repo design** — `00-foundation/` … `05-build-plan/`, the 12 skills in `03-skills/`, prompts in `04-prompts/`
 
 For a screen-by-screen tour see [`app/USER_MANUAL.md`](app/USER_MANUAL.md); for leadership-facing
@@ -25,12 +25,17 @@ samples see [`docs/showcase/`](docs/showcase/); fresh-machine steps in [`readme_
 
 Prereqs: **Python 3.13+**, **uv** (`pip install uv`), **Node 18+** (UI only), git.
 
-```bash
+> **Shell note (Windows PowerShell):** commands are listed **one per line** — run them one
+> at a time. Windows PowerShell 5.1 does **not** support `&&`; use `;` to chain on one line,
+> or just paste each line separately. Set environment variables with `$env:NAME="value"`
+> (PowerShell) or `NAME=value cmd` (bash/zsh). Paths use forward slashes, which work in both.
+
+```
 git clone https://github.com/slakkojulearnings/mipdesign.git
 cd mipdesign/reference-implementation
 uv venv --python 3.13
-uv pip install -e ".[dev,api]"          # engine + tests + API + NetworkX
-# optional: ".[dev,api,advanced]" also installs the ANTLR runtime for MIP_PARSER=advanced
+uv pip install -e ".[dev,api]"
+# optional: uv pip install -e ".[dev,api,advanced]"   # adds the ANTLR runtime for MIP_PARSER=advanced
 ```
 
 ## 2. Run the engine (CLI)
@@ -47,18 +52,37 @@ uv run mip dead                                   # dead-code candidates
 
 ## 3. Run the web app
 
-```bash
-# build the UI (from repo root)
-cd app/frontend && npm install && npm run build
-# serve API + UI on one port (from reference-implementation)
-cd ../../reference-implementation && uv run uvicorn mip.api:app --port 8000
-# open http://localhost:8000     (dev mode with hot reload: `npm run dev` in app/frontend)
+Run these one at a time. Starting from `reference-implementation` (where step 1 left you):
+
 ```
-Screens: Dashboard · Programs (search/sort/facets) · Capabilities · Jobs · **Call Graph**
-(zoom/pan, confidence slider, edge filter, keyboard/ARIA) · Roots · Dead Code · **Query
-Console** (deep-linkable `#/query?q=…`, logged reasoning) · **Q&A Log** · plus per-program
-**Sequence diagram**, **Field-lineage diagram**, **Impact/blast-radius**, **Business rules**,
-**Export** (JSON/CSV/GraphML) and click-to-evidence drill-down.
+cd ../app/frontend
+npm install
+npm run build
+cd ../../reference-implementation
+uv run uvicorn mip.api:app --port 8000
+```
+Then open http://localhost:8000 — the API serves the built UI on the same port.
+(Dev mode with hot reload: run `npm run dev` inside `app/frontend` in a second terminal.)
+Screens: Dashboard · Programs (search/sort/facets) · Capabilities (→ **Capability Requirements**:
+BR + FR rollup, export to Markdown) · Jobs · **Call Graph** (zoom/pan, confidence slider, edge
+filter, clickable edges with evidence, keyboard/ARIA) · Roots · Dead Code · **Query Console**
+(deep-linkable `#/query?q=…`, logged reasoning) · **Q&A Log** · plus per-program **Sequence
+diagram**, **Field-lineage diagram**, **Impact/blast-radius**, **Business rules**, **Export**
+(JSON/CSV/GraphML) and click-to-evidence drill-down.
+
+The top bar shows the active **parser backend** (`default` / `advanced`) and lets you switch it
+— switching re-parses the estate. It reflects `/api/health` and only enables `advanced` when the
+ANTLR backend is installed/built.
+
+**Render the graph to a standalone file** (the in-app Call Graph already visualizes the same
+NetworkX graph; this is for a slide/export). From `reference-implementation`:
+```
+uv pip install -e ".[viz]"                    # adds pyvis + matplotlib (one-time)
+uv run python scripts/draw_graph.py --source ../source_mf_code --out graph.html
+```
+Writes an interactive HTML (pyvis — alongside a `lib/` folder of viewer assets, git-ignored),
+or a PNG (matplotlib) if pyvis is absent. With neither, it points you to **GraphML** (Export menu
+/ `/api/export?format=graphml`) for Gephi/yEd/Cytoscape.
 
 ## 4. Configuration (environment variables)
 
@@ -69,16 +93,25 @@ Console** (deep-linkable `#/query?q=…`, logged reasoning) · **Q&A Log** · pl
 | `MIP_WORKERS` | all CPU cores | parse parallelism (`1` forces serial) |
 | `MIP_BINARY_LIBS` | — | comma-separated extra compiled-library folder names treated as binary |
 
+Set them before the command that uses them — for example, to scan with 8 workers:
+```
+# PowerShell:  $env:MIP_WORKERS="8"  (then run the command on the next line)
+# bash/zsh:    MIP_WORKERS=8 uv run mip scan ../source_mf_code
+```
+
 ---
 
 ## 5. Test the complete functionality
 
-Run everything:
-```bash
-cd reference-implementation
-uv run pytest -q                          # 84 passing
-python ../03-skills/validate_catalog.py   # skills ⇄ catalog in sync (12 skills)
-cd ../app/frontend && npm run build       # UI compiles
+Run everything (one line at a time). From `reference-implementation`:
+```
+uv run pytest -q                              # 90 passing
+uv run python ../03-skills/validate_catalog.py   # skills ⇄ catalog in sync (12 skills)
+```
+Then confirm the UI compiles (from the repo root):
+```
+cd app/frontend
+npm run build
 ```
 
 Per-capability (each maps to a test you can run on its own):
@@ -91,38 +124,49 @@ Per-capability (each maps to a test you can run on its own):
 | Knowledge graph: blast radius, PageRank, Louvain communities | `uv run pytest tests/test_graphx.py -q` | `test_graphx.py` |
 | Field-level data lineage (SQL host-var ↔ column) | part of `test_parser.py` + `GET /api/program/STMTDRV/lineage` | `test_parser.py` |
 | Business-rule extraction | `uv run pytest tests/test_rules.py -q` | `test_rules.py` |
+| Capability requirements (BR + FR rollup, triggers, data access) | `uv run pytest tests/test_capability_requirements.py -q` | `test_capability_requirements.py` |
 | Online layer: CICS + CSD transaction→program | `uv run pytest tests/test_cics.py tests/test_csd.py -q` | `test_cics.py`, `test_csd.py` |
 | Runtime-evidence correlation | `uv run pytest tests/test_runtime.py -q` | `test_runtime.py` |
 | Global search | `uv run pytest tests/test_search.py -q` | `test_search.py` |
 | Export (JSON/CSV/GraphML) + Mermaid sequence diagrams | `uv run pytest tests/test_export.py tests/test_sequence.py -q` | `test_export.py`, `test_sequence.py` |
-| Advanced ANTLR COBOL-85 backend (parity + COPY/REPLACING) | `MIP_PARSER=advanced uv run pytest tests/test_antlr_backend.py tests/test_groundtruth.py -q` | `test_antlr_backend.py` |
+| Advanced ANTLR COBOL-85 backend (parity + COPY/REPLACING) | set `MIP_PARSER=advanced` (see shell note above), then `uv run pytest tests/test_antlr_backend.py tests/test_groundtruth.py -q` | `test_antlr_backend.py` |
 | Parallel parsing == serial (180K-scale) | `uv run pytest tests/test_parallel.py -q` | `test_parallel.py` |
 | Scan/insert performance | `uv run pytest tests/test_perf.py -q` ; `uv run python scripts/benchmark_scan.py` | `test_perf.py` |
 
-Smoke-test the API surface (25 endpoints) without the UI:
-```bash
-uv run python - <<'PY'
-from fastapi.testclient import TestClient; from mip.api import app
+Smoke-test the API surface (27 endpoints) without the UI. Save this as `smoke.py` in
+`reference-implementation`, then run `uv run python smoke.py` (works in any shell):
+```python
+from fastapi.testclient import TestClient
+from mip.api import app
 c = TestClient(app); c.post("/api/scan")
 print("health   :", c.get("/api/health").json()["parser"])
 print("summary  :", c.get("/api/summary").json())
 print("rules    :", [r["kind"] for r in c.get("/api/program/CRDVAL/rules").json()["rules"]])
 print("impact   :", sorted(x["id"] for x in c.get("/api/program/CARD_MASTER/impact").json()["impacted"]))
 print("sequence :", c.get("/api/program/AUTHTRAN/sequence").json()["participants"])
-print("search   :", [(x["kind"],x["id"]) for x in c.get("/api/search?q=AUTH").json()["results"]])
-print("runtime  :", c.get("/api/runtime").json().get("reconciliation",{}).get("summary"))
-PY
+print("search   :", [(x["kind"], x["id"]) for x in c.get("/api/search?q=AUTH").json()["results"]])
+print("runtime  :", c.get("/api/runtime").json().get("reconciliation", {}).get("summary"))
+print("cap req  :", c.get("/api/capability/CRDPOST/requirements").json()["summary"])
+print("parser   :", c.post("/api/parser?mode=default").json()["parser"])
 ```
 
 ## 6. Try it on a real / larger estate
 
-```bash
-# drop real COBOL/JCL/copybooks/CSD into source_mf_code/  (extensions optional), then:
+Drop real COBOL/JCL/copybooks/CSD into `source_mf_code/` (extensions optional), then from
+`reference-implementation`:
+```
 uv run mip scan ../source_mf_code
-# or a public corpus:
+```
+Or pull a public corpus (the clone lands in the current folder, so scan that same name):
+```
 git clone -b experimentation https://github.com/hpatel-appliedai/aws-mainframe-modernization-carddemo
-MIP_WORKERS=8 uv run mip scan aws-mainframe-modernization-carddemo
-# inspect the learned folder map (no hardcoded folder names):
+# PowerShell — set workers, then scan:
+$env:MIP_WORKERS="8"
+uv run mip scan aws-mainframe-modernization-carddemo
+# bash/zsh equivalent:  MIP_WORKERS=8 uv run mip scan aws-mainframe-modernization-carddemo
+```
+Inspect the learned folder map (no hardcoded folder names):
+```
 uv run python -c "import json; from mip import scanner; print(json.dumps(scanner.profile_estate('../source_mf_code'), indent=2))"
 ```
 Scale notes: scanning reads only a 64 KB header per file and skips binaries fast; inserts

@@ -17,6 +17,7 @@ import Lists from "./components/Lists.jsx";
 import QueryConsole from "./components/QueryConsole.jsx";
 import CallGraph from "./components/CallGraph.jsx";
 import Capabilities from "./components/Capabilities.jsx";
+import CapabilityRequirements from "./components/CapabilityRequirements.jsx";
 import QaLog from "./components/QaLog.jsx";
 import GlobalSearch from "./components/GlobalSearch.jsx";
 import ExportMenu from "./components/ExportMenu.jsx";
@@ -69,6 +70,11 @@ function CallGraphRoute() {
 function CapabilitiesRoute() {
   const { openProgram } = useNav();
   return <Capabilities onOpenProgram={openProgram} />;
+}
+function CapabilityRequirementsRoute() {
+  const { name } = useParams();
+  const { openProgram, go } = useNav();
+  return <CapabilityRequirements name={name} onOpenProgram={openProgram} back={() => go("capabilities")} />;
 }
 function RootsRoute() {
   const { openProgram } = useNav();
@@ -125,6 +131,31 @@ function Layout() {
     }
   };
 
+  // Switch the COBOL parser backend (default | advanced) and re-parse the estate.
+  const switchParser = async (mode) => {
+    if (!mode || mode === health?.parser?.requested) return;
+    setScanning(true); setError(null);
+    const pending = pushToast({ title: `Switching to ${mode} parser…`, message: "Re-parsing the estate.", timeout: 0 });
+    try {
+      const r = await api.setParser(mode);
+      setHealth((h) => ({ ...h, parser: r.parser }));
+      window.dispatchEvent(new Event("mip-rescan"));
+      dismissToast(pending);
+      if (mode === "advanced" && r.parser.effective !== "advanced") {
+        pushToast({ kind: "amber", title: "Advanced parser unavailable",
+          message: "The ANTLR backend isn't installed/built — staying on default. Install the 'advanced' extra and build the grammar.",
+          timeout: 7000 });
+      } else {
+        pushToast({ kind: "green", title: `Parser: ${r.parser.effective}`, message: "Estate re-parsed with the new backend." });
+      }
+    } catch (e) {
+      dismissToast(pending); setError(String(e));
+      pushToast({ kind: "red", title: "Parser switch failed", message: String(e), timeout: 6000 });
+    } finally {
+      setScanning(false);
+    }
+  };
+
   const onCopied = (ok) =>
     pushToast(ok
       ? { kind: "green", title: "Link copied", message: "Shareable URL is on your clipboard." }
@@ -151,6 +182,23 @@ function Layout() {
         <div className="topbar">
           <GlobalSearch />
           <div style={{ flex: 1 }} />
+          {health?.parser && (
+            <div className="parser-ctl" title="Active COBOL parser backend">
+              <span className="parser-lbl">parser</span>
+              <select
+                value={health.parser.requested}
+                onChange={(e) => switchParser(e.target.value)}
+                disabled={scanning}
+                aria-label="COBOL parser backend"
+              >
+                <option value="default">default (grammar)</option>
+                <option value="advanced" disabled={!health.parser.advanced_available}>
+                  advanced (ANTLR){health.parser.advanced_available ? "" : " — not installed"}
+                </option>
+              </select>
+              <span className={`parser-eff ${health.parser.effective}`}>{health.parser.effective}</span>
+            </div>
+          )}
           <ExportMenu onCopied={onCopied} />
           <button className="btn secondary" onClick={rescan} disabled={scanning}>
             {scanning ? "Scanning…" : "↻ Rescan source"}
@@ -163,6 +211,7 @@ function Layout() {
           <Route path="/programs" element={<ProgramsRoute />} />
           <Route path="/program/:pid" element={<ProgramDetailRoute />} />
           <Route path="/capabilities" element={<CapabilitiesRoute />} />
+          <Route path="/capability/:name" element={<CapabilityRequirementsRoute />} />
           <Route path="/jobs" element={<JobsRoute />} />
           <Route path="/graph" element={<CallGraphRoute />} />
           <Route path="/roots" element={<RootsRoute />} />

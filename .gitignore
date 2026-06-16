@@ -9,6 +9,10 @@ __pycache__/
 *.db
 app/question_log.md
 app/question_log.jsonl
+# scripts/draw_graph.py output (pyvis also writes a lib/ of JS/CSS next to the HTML)
+graph.html
+graph.png
+reference-implementation/lib/
 
 # Node / frontend build
 node_modules/

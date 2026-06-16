@@ -606,25 +606,34 @@ graph-DB/scale backend, multi-tenant ([`../COMPARISON_AND_ROADMAP.md`](../COMPAR
 
 # Part 5 — Quick reference
 
-```bash
-# setup
-cd reference-implementation && uv venv --python 3.13 && uv pip install -e ".[dev,api]"
+Run one line at a time. Windows PowerShell 5.1 doesn't support `&&`.
 
-# engine
+```
+# setup (from the repo root)
+cd reference-implementation
+uv venv --python 3.13
+uv pip install -e ".[dev,api]"
+
+# engine (from reference-implementation)
 uv run mip scan ../source_mf_code
 uv run mip query "which jobs execute CRDPOST"
-uv run mip roots ; uv run mip dead
+uv run mip roots
+uv run mip dead
 
 # web app  → http://localhost:8000
-cd app/frontend && npm install && npm run build
-cd ../../reference-implementation && uv run uvicorn mip.api:app --port 8000
+cd ../app/frontend
+npm install
+npm run build
+cd ../../reference-implementation
+uv run uvicorn mip.api:app --port 8000
 
-# prove it
-uv run pytest -q                          # 84 passing
-python ../03-skills/validate_catalog.py   # skills ⇄ catalog in sync
+# prove it (from reference-implementation)
+uv run pytest -q                              # 90 passing
+uv run python ../03-skills/validate_catalog.py   # skills ⇄ catalog in sync
 
-# knobs
-MIP_SOURCE=/path   MIP_PARSER=advanced   MIP_WORKERS=8   MIP_BINARY_LIBS=ACMELOAD
+# knobs — set before the command that uses them
+# PowerShell:  $env:MIP_PARSER="advanced"     bash/zsh:  MIP_PARSER=advanced uv run ...
+#   MIP_SOURCE   MIP_PARSER=advanced   MIP_WORKERS=8   MIP_BINARY_LIBS=ACMELOAD
 ```
 
 *Go deeper: [`README.md`](../README.md) (run/test) · [`app/USER_MANUAL.md`](../app/USER_MANUAL.md)

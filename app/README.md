@@ -25,12 +25,14 @@ npm run dev          # opens http://localhost:5173  (proxies /api -> :8000)
 
 ## Run it (one process, prod)
 
-```bash
-cd app/frontend && npm install && npm run build     # builds dist/
-cd ../../reference-implementation
-uv run uvicorn mip.api:app --port 8000              # serves API + the built UI
-# open http://localhost:8000
+Run one line at a time (Windows PowerShell doesn't support `&&`). From `app/frontend`:
 ```
+npm install
+npm run build                          # builds dist/
+cd ../../reference-implementation
+uv run uvicorn mip.api:app --port 8000 # serves API + the built UI
+```
+Then open http://localhost:8000
 
 The backend auto-scans `source_mf_code` on first request. Drop real mainframe code in
 that folder (or set `MIP_SOURCE=/path`) and click **↻ Rescan**.
