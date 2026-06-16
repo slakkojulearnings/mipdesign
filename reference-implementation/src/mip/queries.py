@@ -220,11 +220,8 @@ def capabilities(conn: sqlite3.Connection) -> list[dict]:
     flagged `inferred` with a confidence so it is never mistaken for ground truth.
     """
     progs = set(all_programs(conn))
-    caps = []
-    for root in roots(conn):
-        members = sorted(m for m in _reachable(conn, root, ("CALLS",)) if m in progs)
-        jobs = sorted(r["source_id"] for r in conn.execute(
-            "SELECT source_id FROM relationship WHERE rel_type='EXECUTES' AND target_id=?", (root,)))
+
+    def _data_for(members: list[str]) -> tuple[list[str], list[str]]:
         tables, copybooks = set(), set()
         for m in members:
             for r in conn.execute("SELECT rel_type, target_id FROM relationship WHERE source_id=?", (m,)):
@@ -232,15 +229,61 @@ def capabilities(conn: sqlite3.Connection) -> list[dict]:
                     tables.add(r["target_id"])
                 elif r["rel_type"] == "USES":
                     copybooks.add(r["target_id"])
+        return sorted(tables), sorted(copybooks)
+
+    caps = []
+    covered: set[str] = set()
+    for root in roots(conn):
+        members = sorted(m for m in _reachable(conn, root, ("CALLS",)) if m in progs)
+        covered.update(members)
+        jobs = sorted(r["source_id"] for r in conn.execute(
+            "SELECT source_id FROM relationship WHERE rel_type='EXECUTES' AND target_id=?", (root,)))
+        tables, copybooks = _data_for(members)
         caps.append({
-            "capability": _label(root), "root": root,
+            "capability": _label(root), "root": root, "rootless": False,
             "confidence": 0.5, "validation_status": "inferred",
             "jobs": jobs, "programs": members,
-            "tables": sorted(tables), "copybooks": sorted(copybooks),
+            "tables": tables, "copybooks": copybooks,
             "functions": [{"program": m, "role": _label(m)} for m in members],
             "reason": (f"Inferred from root driver {root} and its confirmed call-closure; "
                        f"capability name derived from naming conventions — review recommended."),
         })
+
+    # Rootless capabilities: programs reachable from NO root driver (dead/orphaned, reached
+    # only via unresolved dynamic CALLs, or shared utilities). Per the "kept and flagged,
+    # never dropped" rule we surface them too — grouped by CALL-connectivity, flagged
+    # inferred at a lower confidence so they are never mistaken for a real entry point.
+    orphans = sorted(progs - covered)
+    if orphans:
+        adj: dict[str, set[str]] = {o: set() for o in orphans}
+        for r in conn.execute("SELECT source_id, target_id FROM relationship WHERE rel_type='CALLS'"):
+            s, t = r["source_id"], r["target_id"]
+            if s in adj and t in adj:                      # edge between two orphans
+                adj[s].add(t); adj[t].add(s)
+        seen: set[str] = set()
+        for start in orphans:                              # connected components (undirected)
+            if start in seen:
+                continue
+            comp, stack = [], [start]
+            while stack:
+                u = stack.pop()
+                if u in seen:
+                    continue
+                seen.add(u); comp.append(u)
+                stack.extend(adj[u] - seen)
+            members = sorted(comp)
+            rep = members[0]
+            tables, copybooks = _data_for(members)
+            caps.append({
+                "capability": _label(rep), "root": rep, "rootless": True,
+                "confidence": 0.3, "validation_status": "inferred",
+                "jobs": [], "programs": members,
+                "tables": tables, "copybooks": copybooks,
+                "functions": [{"program": m, "role": _label(m)} for m in members],
+                "reason": ("Not reachable from any root driver (dead code, dynamically-invoked, "
+                           "or a shared utility). Grouped by call-connectivity — kept and flagged "
+                           "for review; not a confirmed entry point."),
+            })
     return caps
 
 

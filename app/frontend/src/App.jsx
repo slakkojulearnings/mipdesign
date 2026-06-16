@@ -156,11 +156,6 @@ function Layout() {
     }
   };
 
-  const onCopied = (ok) =>
-    pushToast(ok
-      ? { kind: "green", title: "Link copied", message: "Shareable URL is on your clipboard." }
-      : { kind: "red", title: "Copy failed", message: "Clipboard unavailable — copy from the address bar." });
-
   return (
     <div className="app">
       <aside className="sidebar">
@@ -199,7 +194,7 @@ function Layout() {
               <span className={`parser-eff ${health.parser.effective}`}>{health.parser.effective}</span>
             </div>
           )}
-          <ExportMenu onCopied={onCopied} />
+          <ExportMenu />
           <button className="btn secondary" onClick={rescan} disabled={scanning}>
             {scanning ? "Scanning…" : "↻ Rescan source"}
           </button>

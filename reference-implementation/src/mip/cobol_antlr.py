@@ -28,8 +28,13 @@ def available() -> bool:
         return False
 
 
-def parse(text: str):
-    """Parse with the ANTLR COBOL-85 grammar and adapt the tree into a mip Unit."""
+def parse(text: str, resolver=None):
+    """Parse with the ANTLR COBOL-85 grammar and adapt the tree into a mip Unit.
+
+    `resolver(name) -> copybook_text | None` (e.g. antlr_adapter.default_resolver(estate))
+    lets the preprocessor expand `COPY ... REPLACING` from real copybooks, so facts hidden
+    inside copybooks (record layouts, a CALL behind a REPLACING placeholder) are recovered.
+    None -> COPY statements are removed (the COPY edge is still recorded from the raw text)."""
     if not available():
         raise RuntimeError(
             "Advanced ANTLR backend not available. Generate the grammar (see "
@@ -40,7 +45,7 @@ def parse(text: str):
     from .grammar.Cobol85Parser import Cobol85Parser
     from . import antlr_adapter   # walks the ANTLR tree -> mip Unit (ships with the grammar)
 
-    pre = antlr_adapter.preprocess(text)        # normalize + expand COPY/REPLACING + fold EXEC
+    pre = antlr_adapter.preprocess(text, resolver=resolver)   # normalize + expand COPY/REPLACING + fold EXEC
     stream = antlr4.InputStream(pre)
     parser = Cobol85Parser(antlr4.CommonTokenStream(Cobol85Lexer(stream)))
     tree = parser.startRule()

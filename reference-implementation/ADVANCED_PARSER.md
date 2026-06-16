@@ -149,9 +149,24 @@ uv run python scripts/parser_compare.py examples/advanced_parser/CARDADV \
   ==REALSUB==` inlines `CALL ':SUBPGM:'` from the copybook and rewrites it, so the call
   edge the default parser cannot see is recovered.
 
-> Note (honest): the production `parse(text)` path does **not** pass a resolver, so today
-> the toggle does not change results on the sample estate. Wiring the copybook resolver
-> into the pipeline (so real estates expand their `COPY ... REPLACING`) is the next step
-> that turns the advanced backend's coverage into a visible production gain. The
-> `examples/` member lives outside `sample_estate/` so it does not affect the ground-truth
-> counts the test suite asserts.
+### In production (the scan pipeline)
+
+The scan now **wires a copybook resolver into the advanced backend**: when `MIP_PARSER=advanced`,
+`parse_worker.parse_one` builds `antlr_adapter.default_resolver(<estate>)` and threads it through
+`cobol.extract_edges → parser_backend.parse → cobol_antlr.parse → preprocess`. So a real
+`mip scan` of the example estate yields **both** edges:
+
+```
+CARDADV  CALLS  REALSUB   (confirmed)   ← recovered by expanding COPY ... REPLACING
+CARDADV  USES   CALLBOOK  (confirmed)   ← the COPY edge is still recorded
+```
+
+The default backend ignores the resolver (it does not expand copybooks), so it records only the
+`USES` edge. Guarded by `tests/test_advanced_copy_replacing.py`.
+
+> Notes (honest): the **sample estate** copybooks hold only record layouts (no hidden CALLs),
+> so its graph is identical whichever backend you scan with — the divergence shows on copybooks
+> that carry logic, as in `examples/advanced_parser/` (kept outside `sample_estate/` so it never
+> affects the ground-truth counts the suite asserts). The per-program API endpoints (`/lineage`,
+> `/spec`) still parse raw text without a resolver; expansion is wired into the graph/edge path
+> (the scan), where it matters most.

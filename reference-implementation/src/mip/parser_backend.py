@@ -33,10 +33,13 @@ def effective() -> str:
     return "advanced" if (requested() == "advanced" and _advanced_ready()) else "default"
 
 
-def parse(text: str):
+def parse(text: str, resolver=None):
+    """Parse `text` with the effective backend. `resolver(name) -> copybook_text | None`
+    is used only by the advanced backend to expand `COPY ... REPLACING` from real
+    copybooks (the default parser does not expand copybooks and ignores it)."""
     if effective() == "advanced":
         from . import cobol_antlr
-        return cobol_antlr.parse(text)
+        return cobol_antlr.parse(text, resolver=resolver)
     return cobol_ast.parse(text)
 
 

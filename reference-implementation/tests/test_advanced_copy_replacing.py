@@ -13,15 +13,31 @@ runs without the generated ANTLR grammar.
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
+
+import pytest
 
 _SRC = Path(__file__).resolve().parent.parent / "src"
 sys.path.insert(0, str(_SRC))
 
-from mip import antlr_adapter, cobol_ast        # noqa: E402
+from mip import antlr_adapter, cobol, cobol_antlr, cobol_ast, store   # noqa: E402
+from mip.pipeline import build_db                                      # noqa: E402
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples" / "advanced_parser"
 PROGRAM = EXAMPLES / "CARDADV"
+
+
+def _scan_edges(monkeypatch, mode):
+    """Scan the example estate with the given parser backend; return (source,rel,target) edges."""
+    monkeypatch.setenv("MIP_PARSER", mode)
+    with tempfile.TemporaryDirectory() as d:
+        db = str(Path(d) / "ex.db")
+        build_db(EXAMPLES, db)
+        conn = store.connect(db)
+        rows = list(conn.execute("SELECT source_id, rel_type, target_id FROM relationship"))
+        conn.close()
+    return {(r["source_id"], r["rel_type"], r["target_id"]) for r in rows}
 
 
 def _text():
@@ -44,3 +60,23 @@ def test_advanced_expander_recovers_the_call():
     by_target = {c["target"]: c for c in u.calls}
     assert "REALSUB" in by_target
     assert by_target["REALSUB"]["validation"] == "confirmed"
+
+
+def test_scan_default_does_not_expand(monkeypatch):
+    """A full scan with the default backend: the COPY edge is recorded but the hidden CALL
+    is not (no copybook expansion)."""
+    edges = _scan_edges(monkeypatch, "default")
+    assert ("CARDADV", "USES", "CALLBOOK") in edges
+    assert ("CARDADV", "CALLS", "REALSUB") not in edges
+
+
+def test_scan_advanced_resolver_recovers_call(monkeypatch):
+    """A full scan with the advanced backend now wires a copybook resolver into the pipeline,
+    so COPY ... REPLACING expands and the hidden CALL becomes a real graph edge — while the
+    COPY (USES) edge is still recorded. This is the production divergence."""
+    pytest.importorskip("antlr4")
+    if not cobol_antlr.available():
+        pytest.skip("ANTLR grammar not generated (run scripts/gen_grammar.py)")
+    edges = _scan_edges(monkeypatch, "advanced")
+    assert ("CARDADV", "CALLS", "REALSUB") in edges      # recovered from the copybook
+    assert ("CARDADV", "USES", "CALLBOOK") in edges       # COPY edge still recorded

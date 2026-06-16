@@ -13,7 +13,7 @@ Source Code → Inventory → Metadata → Knowledge Graph → Reasoning → Cop
 - **Engine** — `reference-implementation/` (Python 3.13, stdlib-only runtime; optional extras)
 - **Web app** — `app/` (FastAPI API + React/Vite UI)
 - **Your code goes in** — `source_mf_code/` (or point `MIP_SOURCE` anywhere)
-- **Tests** — **97 passing** (engine + graph + parser + spec + app endpoints); advanced ANTLR backend parity **28**
+- **Tests** — **101 passing** (engine + graph + parser + spec + app endpoints); advanced ANTLR backend parity **28**
 - **Repo design** — `00-foundation/` … `05-build-plan/`, the 13 skills in `03-skills/`, prompts in `04-prompts/`
 
 For a screen-by-screen tour see [`app/USER_MANUAL.md`](app/USER_MANUAL.md); for leadership-facing
@@ -69,9 +69,10 @@ Then open http://localhost:8000 — the API serves the built UI on the same port
 > `/api/...` calls, the running process is stale — stop it (Ctrl+C) and start it again, or
 > run with `--reload`: `uv run uvicorn mip.api:app --reload --port 8000`. (Those errors come
 > from the SPA static mount answering routes the old process didn't register.)
-Screens: Dashboard · Programs (search/sort/facets) · Capabilities (→ **Capability Requirements**:
-BR + FR rollup, export to Markdown, plus **Developer detail** — data layouts, procedure
-pseudocode, per-rule code snippets + typed fields) · Jobs · **Call Graph** (zoom/pan, confidence slider, edge
+Screens: Dashboard · Programs (search/sort/facets) · Capabilities (root-driven **and**
+rootless/orphan; → **Capability Requirements**: BR + FR rollup, export to Markdown, plus
+**Developer detail** — data layouts, procedure pseudocode, per-rule code snippets + typed
+fields) · Jobs · **Call Graph** (zoom/pan, confidence slider, edge
 filter, clickable edges with evidence, keyboard/ARIA) · Roots · Dead Code · **Query Console**
 (deep-linkable `#/query?q=…`, logged reasoning) · **Q&A Log** · plus per-program **Sequence
 diagram**, **Field-lineage diagram**, **Impact/blast-radius**, **Business rules**, **Export**
@@ -79,8 +80,10 @@ diagram**, **Field-lineage diagram**, **Impact/blast-radius**, **Business rules*
 
 The top bar shows the active **parser backend** (`default` / `advanced`) and lets you switch it
 — switching re-parses the estate. It reflects `/api/health` and only enables `advanced` when the
-ANTLR backend is installed/built. On clean COBOL both backends agree by design (parity-tested);
-to *see* where advanced differs (COPY … REPLACING expansion), run
+ANTLR backend is installed/built. When you scan with `advanced`, the pipeline wires a copybook
+resolver so `COPY … REPLACING` is expanded from the estate's `COPYLIB` — recovering facts hidden
+in copybooks (e.g. a `CALL` behind a `REPLACING` placeholder). On clean COBOL both backends agree
+by design (parity-tested); to *see* the difference, run
 `uv run python scripts/parser_compare.py examples/advanced_parser/CARDADV --copylib examples/advanced_parser`
 (see [ADVANCED_PARSER.md](reference-implementation/ADVANCED_PARSER.md)).
 
@@ -115,7 +118,7 @@ Set them before the command that uses them — for example, to scan with 8 worke
 
 Run everything (one line at a time). From `reference-implementation`:
 ```
-uv run pytest -q                              # 97 passing
+uv run pytest -q                              # 101 passing
 uv run python ../03-skills/validate_catalog.py   # skills ⇄ catalog in sync (13 skills)
 ```
 Then confirm the UI compiles (from the repo root):

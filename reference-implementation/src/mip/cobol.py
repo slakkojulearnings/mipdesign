@@ -21,8 +21,8 @@ def structure(text: str) -> dict:
             "counts": u.counts, "complexity": u.complexity}
 
 
-def extract_edges(text: str, program: str, rel_path: str) -> list[Edge]:
-    u = parser_backend.parse(text)
+def extract_edges(text: str, program: str, rel_path: str, resolver=None) -> list[Edge]:
+    u = parser_backend.parse(text, resolver=resolver)
     edges: list[Edge] = []
 
     def add(rel, ttype, target, ev):

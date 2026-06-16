@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import cics_csd, cobol, jcl
+from . import antlr_adapter, cics_csd, cobol, jcl, parser_backend
 from .records import Program
 
 
@@ -46,7 +46,11 @@ def parse_one(estate_str: str, rel_path: str, artifact_type: str,
         program = Program(
             program_id=prog, program_name=prog, language="cobol",
             artifact_id=artifact_id, line_count=line_count, evidence=evidence)
-        edges = cobol.extract_edges(text, prog, rel_path)
+        # advanced backend: give it a copybook resolver so COPY ... REPLACING expands from
+        # the estate's COPYLIB and facts hidden in copybooks are recovered. (default ignores it)
+        resolver = (antlr_adapter.default_resolver(Path(estate_str))
+                    if parser_backend.effective() == "advanced" else None)
+        edges = cobol.extract_edges(text, prog, rel_path, resolver=resolver)
         return {"kind": "cobol", "rel": rel_path, "program": program, "edges": edges}
 
     if artifact_type == "jcl":

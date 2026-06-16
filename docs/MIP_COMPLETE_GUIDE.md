@@ -629,7 +629,7 @@ cd ../../reference-implementation
 uv run uvicorn mip.api:app --port 8000
 
 # prove it (from reference-implementation)
-uv run pytest -q                              # 97 passing
+uv run pytest -q                              # 101 passing
 uv run python ../03-skills/validate_catalog.py   # skills ⇄ catalog in sync
 
 # knobs — set before the command that uses them

@@ -30,6 +30,35 @@ def _detail(name):
     return out
 
 
+def _caps():
+    with tempfile.TemporaryDirectory() as d:
+        db = str(Path(d) / "mip.db")
+        build_db(ESTATE, db)
+        conn = store.connect(db)
+        out = queries.capabilities(conn)
+        conn.close()
+    return out
+
+
+def test_root_driven_capabilities_are_flagged_rootless_false():
+    caps = _caps()
+    root_driven = [c for c in caps if not c["rootless"]]
+    assert {c["root"] for c in root_driven} >= {"CRDPOST", "AUTHTRAN", "STMTDRV"}
+
+
+def test_dead_program_surfaces_as_a_rootless_capability():
+    """DEADPROG is reachable from no root — instead of vanishing it must appear as a
+    rootless capability (kept and flagged, lower confidence)."""
+    caps = _caps()
+    rootless = [c for c in caps if c["rootless"]]
+    members = {p for c in rootless for p in c["programs"]}
+    assert "DEADPROG" in members
+    cap = next(c for c in rootless if "DEADPROG" in c["programs"])
+    assert cap["validation_status"] == "inferred"
+    assert cap["confidence"] < 0.5
+    assert cap["jobs"] == []                       # no entry point
+
+
 def test_resolvable_by_root_and_by_inferred_name():
     d = _detail("CRDPOST")
     assert d["root"] == "CRDPOST"
