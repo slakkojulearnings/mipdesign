@@ -1,0 +1,34 @@
+[
+  {
+    "asset_id": "8fdc45e419fa74cf",
+    "ast_summary": {
+      "complexity": 1,
+      "copy_replacing": [
+        {
+          "line": 14,
+          "text": "COPY CALLBOOK REPLACING ==:SUBPGM:== BY ==REALSUB==."
+        }
+      ],
+      "counts": {
+        "CALL": 1,
+        "COPY": 0,
+        "EXEC_SQL": 0,
+        "IF": 0,
+        "PERFORM": 0
+      },
+      "data_item_count": 2,
+      "divisions": [
+        "IDENTIFICATION",
+        "DATA",
+        "PROCEDURE"
+      ],
+      "field_flow_count": 0,
+      "paragraphs": [
+        "0000-MAIN"
+      ],
+      "program_id": "CARDADV"
+    },
+    "relative_path": "CARDADV",
+    "technical_name": "CARDADV"
+  }
+]

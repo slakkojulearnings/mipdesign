@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mip-enterprise-intelligence"
+version = "0.1.0"
+description = "SQLite-backed mainframe intelligence graph platform with bounded graph slices"
+requires-python = ">=3.11"
+dependencies = ["antlr4-python3-runtime>=4.13,<5"]
+
+[project.optional-dependencies]
+api = ["fastapi>=0.115,<1", "uvicorn>=0.34,<1"]
+dev = ["pytest>=8.3,<10"]
+
+[project.scripts]
+mip-intel = "mip_intel.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"mip_intel" = ["schema.sql"]
+"mip_intel.cobol_antlr" = ["PARSER_PROVENANCE.md"]
+"mip_intel.cobol_antlr.grammar" = ["*.tokens"]

@@ -1,0 +1,12 @@
+{
+  "copybooks": [
+    "CALLBOOK"
+  ],
+  "data_assets": [],
+  "jobs": [],
+  "programs": [
+    "CARDADV",
+    "REALSUB"
+  ],
+  "unresolved": []
+}

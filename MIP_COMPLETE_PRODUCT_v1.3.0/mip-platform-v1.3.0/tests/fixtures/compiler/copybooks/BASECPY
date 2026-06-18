@@ -1,0 +1,7 @@
+       01  :PFX:-RECORD.
+           05 :PFX:-ID              PIC X(10).
+           05 :PFX:-STATUS          PIC X VALUE 'A'.
+           05 :PFX:-COUNT           PIC 9(02).
+           05 :PFX:-ITEM OCCURS 1 TO 10 TIMES
+                DEPENDING ON :PFX:-COUNT.
+              10 :PFX:-AMOUNT       PIC S9(7)V99 COMP-3.

@@ -1,0 +1,16 @@
+{
+  "folders": [
+    { "path": "." },
+    { "path": "mfcode", "name": "Mainframe Source (read-only)" }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": ".venv/Scripts/python.exe",
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": ["tests"],
+    "editor.formatOnSave": true,
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/.pytest_cache": true
+    }
+  }
+}

@@ -1,0 +1,12 @@
+INFO:     127.0.0.1:19311 - "GET /clusters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19312 - "GET /clusters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19343 - "GET /clusters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19372 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19373 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19374 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19375 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19381 - "GET /graph/slice?root_asset_id=5c6404f1e90466bb&depth=2&limit=350&mode=neighborhood&relationship_types=&confidence_min=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20129 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20128 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20126 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20130 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK

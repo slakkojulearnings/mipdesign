@@ -1,0 +1,12 @@
+{
+  "asset_count": 3,
+  "ast_count": 1,
+  "depth": 4,
+  "evidence_count": 4,
+  "file_count": 2,
+  "relationship_count": 2,
+  "root_asset_id": "8fdc45e419fa74cf",
+  "run_id": "103ff427ed6a19e0",
+  "source_root": "F:\\mip\\mip_structure\\reference-implementation\\examples\\advanced_parser",
+  "truncated": false
+}

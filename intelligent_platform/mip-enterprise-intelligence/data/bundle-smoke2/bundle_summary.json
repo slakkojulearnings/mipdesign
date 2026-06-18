@@ -1,0 +1,23 @@
+{
+  "copied_sources": [
+    {
+      "output": "data\\bundle-smoke2\\source\\CARDADV",
+      "relative_path": "CARDADV"
+    },
+    {
+      "output": "data\\bundle-smoke2\\source\\COPYLIB\\CALLBOOK",
+      "relative_path": "COPYLIB/CALLBOOK"
+    }
+  ],
+  "json_files": [
+    "manifest.json",
+    "files.json",
+    "assets.json",
+    "relationships.json",
+    "evidence.json",
+    "ast.json",
+    "minimal_context.json"
+  ],
+  "output_dir": "data\\bundle-smoke2",
+  "skipped_sources": []
+}

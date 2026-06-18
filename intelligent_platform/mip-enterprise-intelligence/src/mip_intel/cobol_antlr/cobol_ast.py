@@ -1,0 +1,639 @@
+"""Grammar-based COBOL parser (hand-written recursive descent).
+
+Replaces the v0.1 regex extractor with a real tokenizer + parser that builds an AST and
+unlocks three capabilities the regex pass could not:
+
+  1. Accurate AST            — divisions, paragraphs, data items, statements.
+  2. Dynamic-call resolution — constant propagation: `MOVE 'X' TO WS-P` then
+                               `CALL WS-P` resolves the target to X (labeled *inferred*).
+  3. Field-level lineage     — `MOVE A TO B` field flows + EXEC SQL host-variable ↔
+                               column mapping (read/write direction).
+
+Scope (honest): this is a focused grammar covering the common COBOL constructs (the
+IDENTIFICATION/DATA/PROCEDURE divisions, paragraphs, MOVE/CALL/IF/PERFORM/COMPUTE/
+DISPLAY, COPY, and embedded EXEC SQL). It is NOT a full COBOL-85 grammar — `COPY
+REPLACING`, the report writer, nested programs, and macro pre-processing are out of
+scope and documented as such. The architecture path to full fidelity is an ANTLR
+COBOL85 grammar (see 00-foundation/ARCHITECTURE.md); this parser is self-contained and
+portable, and is correct for the constructs it claims.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+
+_LIT = r"'[^']*'|\"[^\"]*\""
+_WORD = r"[A-Za-z][A-Za-z0-9-]*"
+_NUM = r"[0-9]+(?:\.[0-9]+)?"
+_TOKEN_RE = re.compile(rf"(?:{_LIT})|:{_WORD}|{_WORD}|{_NUM}|[().,:=<>+*/-]")
+
+DIVISIONS = ("IDENTIFICATION", "ENVIRONMENT", "DATA", "PROCEDURE")
+_VERBS = {
+    "MOVE", "CALL", "IF", "ELSE", "END-IF", "PERFORM", "COMPUTE", "DISPLAY", "ACCEPT",
+    "ADD", "SUBTRACT", "MULTIPLY", "DIVIDE", "EXEC", "END-EXEC", "OPEN", "CLOSE",
+    "READ", "WRITE", "REWRITE", "DELETE", "START", "SET", "EVALUATE", "STOP", "GO",
+    "GOBACK", "RETURN", "INITIALIZE", "STRING", "UNSTRING", "INSPECT", "SEARCH",
+}
+_PARA_RE = re.compile(r"^\s{0,7}([A-Za-z0-9][A-Za-z0-9-]*)\.\s*$")
+_SECTION = re.compile(r"(?i)^\s*([A-Z][A-Z-]*)\s+SECTION\s*\.")    # DATA DIVISION sections
+_NON_PARA = {"GOBACK", "STOP", "EXIT", "CONTINUE", "END-IF", "END-EVALUATE",
+             "END-PERFORM", "END-EXEC", "END-CALL"}
+_PROGRAM_ID = re.compile(r"(?i)PROGRAM-ID\s*\.\s*([A-Z0-9][A-Z0-9-]*)")
+_COPY = re.compile(r"(?i)\bCOPY\s+([A-Z0-9][A-Z0-9-]*)")
+_SQL_BLOCK = re.compile(r"(?is)EXEC\s+SQL(.*?)END-EXEC")
+_DATA_ITEM = re.compile(r"^\s*(\d{2})\s+([A-Za-z][\w-]*)\b(.*)$")
+_PIC = re.compile(r"(?i)\bPIC(?:TURE)?\s+(?:IS\s+)?([A-Z0-9()VS.,+\-]+)")
+
+
+@dataclass
+class Unit:
+    program_id: str | None = None
+    divisions: list = field(default_factory=list)
+    paragraphs: list = field(default_factory=list)
+    data_items: list = field(default_factory=list)
+    calls: list = field(default_factory=list)      # {target, kind, via?, line, confidence, validation}
+    copies: list = field(default_factory=list)      # {name, line}
+    sql: list = field(default_factory=list)         # {op, table, line}  (READS/WRITES)
+    cics: list = field(default_factory=list)        # online edges {rel, ttype, target, kind, line, confidence, validation}
+    field_flows: list = field(default_factory=list)  # {src, dst, kind, line}
+    counts: dict = field(default_factory=dict)
+    complexity: int = 1
+
+
+def _is_comment(line: str) -> bool:
+    s = line.lstrip()
+    return s.startswith("*") or s.startswith("/")
+
+
+def _line_of(text: str, idx: int) -> int:
+    return text.count("\n", 0, idx) + 1
+
+
+def _tokenize_region(lines: list[tuple[int, str]]) -> list[tuple[str, int]]:
+    """(token, line_no) stream over given (line_no, text) lines."""
+    toks = []
+    for ln, txt in lines:
+        for m in _TOKEN_RE.finditer(txt):
+            toks.append((m.group(0), ln))
+    return toks
+
+
+def _strip_quotes(s: str) -> str:
+    return s[1:-1] if s and s[0] in "'\"" else s
+
+
+def parse(text: str) -> Unit:
+    u = Unit()
+    u.program_id = (_PROGRAM_ID.search(text).group(1).upper()
+                    if _PROGRAM_ID.search(text) else None)
+    up = text.upper()
+    u.divisions = [d for d in DIVISIONS if f"{d} DIVISION" in up]
+
+    lines = [(i, l) for i, l in enumerate(text.splitlines(), 1) if not _is_comment(l)]
+    # comment-blanked copy (same line count -> line numbers preserved) so EXEC SQL/CICS
+    # mentioned inside comments can't poison block detection.
+    code_text = "\n".join("" if _is_comment(l) else l for l in text.splitlines())
+
+    # ---- DATA DIVISION items + COPY (anywhere) ----
+    proc_pos = up.find("PROCEDURE DIVISION")
+    section = None                                  # current DATA DIVISION section
+    for ln, txt in lines:
+        # copies
+        for m in _COPY.finditer(txt):
+            u.copies.append({"name": m.group(1).upper(), "line": ln})
+        # data items only before PROCEDURE
+        if proc_pos >= 0 and _line_of(text, proc_pos) <= ln:
+            continue
+        sm = _SECTION.match(txt)
+        if sm:                                       # FILE / WORKING-STORAGE / LINKAGE / …
+            section = sm.group(1).upper()
+            continue
+        di = _DATA_ITEM.match(txt)
+        if di:
+            pic = _PIC.search(di.group(3))
+            u.data_items.append({"level": int(di.group(1)), "name": di.group(2).upper(),
+                                 "pic": pic.group(1) if pic else None, "line": ln,
+                                 "section": section})
+
+    # ---- EXEC SQL blocks: READS/WRITES tables + field lineage ----
+    for m in _SQL_BLOCK.finditer(code_text):
+        body, ln = m.group(1), _line_of(code_text, m.start())
+        u.sql.extend(_sql_edges(body, ln))
+        u.field_flows.extend(_sql_lineage(body, ln))
+
+    # ---- EXEC CICS blocks: the online execution layer ----
+    for m in _CICS_BLOCK.finditer(code_text):
+        body, ln = m.group(1), _line_of(code_text, m.start())
+        u.cics.extend(_cics_edges(body, ln))
+
+    # ---- PROCEDURE DIVISION: paragraphs, statements, calls, moves, const-prop ----
+    if proc_pos >= 0:
+        proc_start_ln = _line_of(text, proc_pos)
+        proc_lines = [(ln, txt) for ln, txt in lines if ln > proc_start_ln]
+        for ln, txt in proc_lines:
+            pm = _PARA_RE.match(txt)
+            if pm:
+                nm = pm.group(1).upper()
+                if nm not in _NON_PARA and not nm.endswith(("DIVISION", "SECTION")):
+                    u.paragraphs.append(nm)
+        _parse_procedure(_tokenize_region(proc_lines), u)
+
+    code = "\n".join(t for _, t in lines)
+    u.counts = {
+        "CALL": len(re.findall(r"(?i)\bCALL\b", code)),
+        "PERFORM": len(re.findall(r"(?i)\bPERFORM\b", code)),
+        "IF": len(re.findall(r"(?i)\bIF\b", code)),
+        "COPY": len(u.copies),
+        "EXEC_SQL": len(u.sql),
+    }
+    u.complexity = 1 + u.counts["IF"] + u.counts["PERFORM"]
+    return u
+
+
+_ARITH = {"ADD", "SUBTRACT", "MULTIPLY", "DIVIDE"}
+_ARITH_SEP = ("TO", "FROM", "INTO", "BY")
+_OPERATORS = {"=", "+", "-", "*", "/", "**"}
+# tokens that are never a data name: separators, arithmetic options, qualifiers, operators
+_SKIP = {"TO", "FROM", "INTO", "BY", "GIVING", "ROUNDED", "REMAINDER", "OF", "IN",
+         "TIMES"} | _OPERATORS
+
+
+def _names(tokens: list[str]) -> list[str]:
+    """Distinct data-names in a token slice. Skips separator/option keywords, operators,
+    parenthesised subscripts/reference-mods, and qualifier tails (the X in `A OF X`)."""
+    out, depth, prev = [], 0, None
+    for t in tokens:
+        if t == "(":
+            depth += 1; prev = "("; continue
+        if t == ")":
+            depth = max(0, depth - 1); prev = ")"; continue
+        if depth > 0:
+            continue
+        T = t.upper()
+        if re.fullmatch(_WORD, t) and T not in _SKIP and prev not in ("OF", "IN"):
+            out.append(T)
+        prev = T
+    seen, res = set(), []
+    for x in out:
+        if x not in seen:
+            seen.add(x); res.append(x)
+    return res
+
+
+def _group_items(items: list[dict]) -> set[str]:
+    """Names of group data items (an item whose next sibling has a deeper level)."""
+    groups = set()
+    for a, b in zip(items, items[1:]):
+        if b["level"] > a["level"]:
+            groups.add(a["name"])
+    return groups
+
+
+def _clause(toks: list[tuple[str, int]], i: int) -> tuple[list[str], int]:
+    """Tokens of the statement starting after index i, up to '.' or the next verb."""
+    j = i + 1
+    out = []
+    while j < len(toks) and toks[j][0] != "." and toks[j][0].upper() not in _VERBS:
+        out.append(toks[j][0])
+        j += 1
+    return out, j
+
+
+def _arith_flows(clause: list[str]) -> list[tuple[str, str]]:
+    """Source->target field derivations for ADD/SUBTRACT/MULTIPLY/DIVIDE.
+    _names() drops the separator/option keywords so they can't leak in as fields."""
+    up = [c.upper() for c in clause]
+    if "GIVING" in up:
+        gi = up.index("GIVING")
+        srcs, tgts = _names(clause[:gi]), _names(clause[gi + 1:])
+    else:
+        sep = next((k for k in _ARITH_SEP if k in up), None)
+        if sep is None:
+            return []
+        si = up.index(sep)
+        srcs, tgts = _names(clause[:si]), _names(clause[si + 1:])
+    return [(s, t) for s in srcs for t in tgts if s != t]
+
+
+def _parse_procedure(toks: list[tuple[str, int]], u: Unit) -> None:
+    const: dict[str, str] = {}      # var -> resolved literal (constant propagation)
+    groups = _group_items(u.data_items)
+    n = len(toks)
+    i = 0
+    while i < n:
+        tok, ln = toks[i]
+        T = tok.upper()
+
+        if T == "MOVE":
+            clause, j = _clause(toks, i)
+            up = [c.upper() for c in clause]
+            if "TO" in up:
+                ti = up.index("TO")
+                left, right = clause[:ti], clause[ti + 1:]
+            else:
+                left, right = clause[:1], []
+            targets = _names(right)                            # robust to OF/IN + subscripts
+            first = left[0] if left else ""
+            if first and first[0] in "'\"":                   # literal move -> const
+                lit = _strip_quotes(first)
+                for t in targets:
+                    const[t] = lit
+            else:
+                src_names = _names(left)                       # source skips qualifiers/refmod
+                if src_names:                                  # field-to-field flow
+                    s = src_names[0]
+                    kind = "move-group" if s in groups else "move"
+                    for t in targets:
+                        u.field_flows.append({"src": s, "dst": t, "kind": kind, "line": ln})
+                        if s in const:
+                            const[t] = const[s]
+                        else:
+                            const.pop(t, None)
+                else:                                          # numeric/other -> clears const
+                    for t in targets:
+                        const.pop(t, None)
+            i = j
+            continue
+
+        if T == "CALL":
+            nxt = toks[i + 1][0] if i + 1 < n else ""
+            if nxt and nxt[0] in "'\"":
+                u.calls.append({"target": _strip_quotes(nxt).upper(), "kind": "static",
+                                "line": ln, "confidence": 1.0, "validation": "confirmed"})
+            elif re.fullmatch(_WORD, nxt):
+                var = nxt.upper()
+                if var in const:
+                    u.calls.append({"target": const[var].upper(), "kind": "resolved",
+                                    "via": var, "line": ln, "confidence": 0.7,
+                                    "validation": "inferred"})
+                else:
+                    u.calls.append({"target": var, "kind": "dynamic", "line": ln,
+                                    "confidence": 0.3, "validation": "needs_review"})
+            i += 2
+            continue
+
+        if T == "COMPUTE":                                   # COMPUTE t [ROUNDED] = expr(a,b,…)
+            clause, j = _clause(toks, i)
+            if "=" in clause:
+                ei = clause.index("=")
+                targets = _names(clause[:ei])                 # receivers (drops ROUNDED)
+                sources = _names(clause[ei + 1:])             # operands in the expression
+                for s in sources:
+                    for t in targets:
+                        u.field_flows.append({"src": s, "dst": t, "kind": "compute", "line": ln})
+            i = j
+            continue
+
+        if T in _ARITH:                                      # ADD/SUBTRACT/MULTIPLY/DIVIDE
+            clause, j = _clause(toks, i)
+            for s, d in _arith_flows(clause):
+                u.field_flows.append({"src": s, "dst": d, "kind": "arith", "line": ln})
+            i = j
+            continue
+
+        i += 1
+
+
+# --- EXEC SQL helpers ------------------------------------------------------
+_SQL_NAME = r"[A-Z0-9_.$#@]+"
+_SQL_UPDATE = re.compile(rf"(?i)\bUPDATE\s+({_SQL_NAME})")
+_SQL_INSERT = re.compile(rf"(?i)\bINSERT\s+INTO\s+({_SQL_NAME})")
+_SQL_DELETE = re.compile(rf"(?i)\bDELETE\s+FROM\s+({_SQL_NAME})")
+_SQL_MERGE = re.compile(rf"(?i)\bMERGE\s+INTO\s+({_SQL_NAME})")
+_SQL_FROM = re.compile(rf"(?i)\b(?:FROM|JOIN)\s+({_SQL_NAME})")
+
+
+def _sql_edges(body: str, ln: int) -> list[dict]:
+    edges = []
+    for rx, op in (
+        (_SQL_UPDATE, "WRITES"),
+        (_SQL_INSERT, "WRITES"),
+        (_SQL_DELETE, "WRITES"),
+        (_SQL_MERGE, "WRITES"),
+    ):
+        for m in rx.finditer(body):
+            edges.append({"op": op, "table": m.group(1).upper(), "line": ln})
+    if re.search(r"(?i)\bSELECT\b", body):
+        for m in _SQL_FROM.finditer(body):
+            edges.append({"op": "READS", "table": m.group(1).upper(), "line": ln})
+    return edges
+
+
+def _hostvars(s: str) -> list[str]:
+    return [h.upper() for h in re.findall(r":([A-Za-z][\w-]*)", s)]
+
+
+def _sql_lineage(body: str, ln: int) -> list[dict]:
+    """Field-level lineage from host-variable <-> column mapping."""
+    flows = []
+    sel = re.search(r"(?is)SELECT\s+(.*?)\s+INTO\s+(.*?)\s+FROM\s+([A-Z0-9_]+)", body)
+    if sel:
+        cols = [c.strip().upper() for c in sel.group(1).split(",")]
+        hvs = _hostvars(sel.group(2))
+        table = sel.group(3).upper()
+        for col, hv in zip(cols, hvs):
+            flows.append({"src": f"{table}.{col}", "dst": hv, "kind": "sql-read", "line": ln})
+        return flows
+    ins = re.search(r"(?is)INSERT\s+INTO\s+([A-Z0-9_]+)\s*\((.*?)\)\s*VALUES\s*\((.*?)\)", body)
+    if ins:
+        table = ins.group(1).upper()
+        cols = [c.strip().upper() for c in ins.group(2).split(",")]
+        hvs = _hostvars(ins.group(3))
+        for col, hv in zip(cols, hvs):
+            flows.append({"src": hv, "dst": f"{table}.{col}", "kind": "sql-write", "line": ln})
+        return flows
+    upd = re.search(r"(?is)UPDATE\s+([A-Z0-9_]+)\s+SET\s+(.*?)(?:WHERE|$)", body)
+    if upd:
+        table = upd.group(1).upper()
+        for col, hv in re.findall(r"([A-Za-z][\w-]*)\s*=\s*:([A-Za-z][\w-]*)", upd.group(2)):
+            flows.append({"src": hv.upper(), "dst": f"{table}.{col.upper()}",
+                          "kind": "sql-write", "line": ln})
+    return flows
+
+
+# --- Business-rule extraction (rule-bearing PROCEDURE DIVISION logic) -------
+# Facts (the raw COBOL condition / calculation text) are `confirmed` from source;
+# the kind classification + plain-English rendering are *interpretation* (`inferred`).
+_REL_OPS = {
+    "=": "is equal to", "<": "is less than", ">": "is greater than",
+    "<=": "is less than or equal to", ">=": "is greater than or equal to",
+    "<>": "is not equal to",
+}
+# words that hint a condition is a validation/guard rather than a plain decision
+_VALIDATION_HINTS = ("VALID", "INVALID", "ERROR", "STATUS", "RETURN-CODE",
+                     "RC", "OK", "FAIL", "REJECT", "CHECK")
+
+
+def _proc_lines(text: str) -> tuple[list[tuple[int, str]], int]:
+    """Non-comment (line_no, text) lines inside the PROCEDURE DIVISION + its start line."""
+    up = text.upper()
+    proc_pos = up.find("PROCEDURE DIVISION")
+    if proc_pos < 0:
+        return [], -1
+    start = _line_of(text, proc_pos)
+    lines = [(i, l) for i, l in enumerate(text.splitlines(), 1)
+             if not _is_comment(l) and i > start]
+    return lines, start
+
+
+def _cond_text(tokens: list[tuple[str, int]], i: int) -> tuple[str, int]:
+    """Raw condition text after IF/WHEN at index i, up to THEN/a verb/'.'; returns (text, j)."""
+    j = i + 1
+    out: list[str] = []
+    while j < len(tokens):
+        t = tokens[j][0]
+        T = t.upper()
+        if t == "." or T == "THEN" or (T in _VERBS and T not in ("NOT",)):
+            break
+        out.append(t)
+        j += 1
+    return _join_tokens(out), j
+
+
+def _action_text(tokens: list[tuple[str, int]], i: int) -> str:
+    """Short summary of the guarded action: the first statement after the condition,
+    up to ELSE / END-IF / WHEN / '.'."""
+    out: list[str] = []
+    j = i
+    while j < len(tokens):
+        T = tokens[j][0].upper()
+        if T in ("ELSE", "END-IF", "WHEN", "END-EVALUATE") or tokens[j][0] == ".":
+            break
+        out.append(tokens[j][0])
+        j += 1
+    return _join_tokens(out)
+
+
+def _join_tokens(toks: list[str]) -> str:
+    """Re-render a token slice as readable text (no space before punctuation)."""
+    s = ""
+    for t in toks:
+        if not s or t in ").," or (s and s[-1] == "("):
+            s += t
+        else:
+            s += " " + t
+    return s.strip().rstrip(".").strip()
+
+
+def _render_condition(cond: str) -> str:
+    """Deterministic plain-English rendering of a simple relational condition (template)."""
+    m = re.match(rf"^\s*([A-Za-z][\w-]*)\s*(<=|>=|<>|=|<|>)\s*(.+?)\s*$", cond)
+    if m:
+        field, op, val = m.group(1), m.group(2), m.group(3).strip()
+        return f"{field} {_REL_OPS.get(op, op)} {val}"
+    return cond
+
+
+def _classify(cond: str, kind_hint: str | None) -> str:
+    if kind_hint:
+        return kind_hint
+    upper = cond.upper()
+    if any(h in upper for h in _VALIDATION_HINTS):
+        return "validation"
+    return "decision"
+
+
+def business_rules(text: str, program: str, rel_path: str) -> list[dict]:
+    """Extract rule-bearing logic (IF / EVALUATE WHEN / COMPUTE) from the PROCEDURE DIVISION.
+
+    Honesty (Principle 1): the raw *condition text* and its source line are `confirmed`
+    (they are in the source). The *kind* classification and *plain-English statement* are
+    interpretation, so each rule is flagged `inferred` (confidence ~0.6) while its
+    source_evidence still points at the real line. No business meaning is fabricated
+    beyond a literal templated rendering of the condition.
+    """
+    lines, _ = _proc_lines(text)
+    if not lines:
+        return []
+    toks = _tokenize_region(lines)
+    rules: list[dict] = []
+    n = len(toks)
+    i = 0
+    rid = 0
+
+    while i < n:
+        tok, ln = toks[i]
+        T = tok.upper()
+
+        if T == "IF":
+            cond, j = _cond_text(toks, i)
+            action = _action_text(toks, j)
+            kind = _classify(cond, None)
+            rid += 1
+            rules.append(_rule(rid, kind, cond, action, program, rel_path, ln))
+            i = j
+            continue
+
+        if T == "WHEN":                                   # EVALUATE … WHEN <value>
+            cond, j = _cond_text(toks, i)
+            if cond.upper() != "OTHER" and cond:
+                action = _action_text(toks, j)
+                rid += 1
+                rules.append(_rule(rid, "decision", cond, action, program, rel_path, ln))
+            i = j
+            continue
+
+        if T == "COMPUTE":                                # COMPUTE t = expr  (calculation)
+            clause, j = _clause(toks, i)
+            cond = _join_tokens(clause)
+            rid += 1
+            rules.append(_rule(rid, "calculation", cond, "", program, rel_path, ln,
+                               calculation=True))
+            i = j
+            continue
+
+        i += 1
+
+    return rules
+
+
+def _rule(rid: int, kind: str, cond: str, action: str, program: str, rel_path: str,
+          ln: int, calculation: bool = False) -> dict:
+    fields = _names(re.findall(_TOKEN_RE, cond))
+    if calculation:                                       # COMPUTE t = expr -> "Set t to expr"
+        m = re.match(r"^\s*(.+?)\s*=\s*(.+?)\s*$", cond)
+        statement = (f"Set {m.group(1)} to {m.group(2)}." if m
+                     else f"Calculate {cond}.")
+    else:
+        rendered = _render_condition(cond)
+        statement = (f"When {rendered}, then {action.lower()}." if action
+                     else f"When {rendered}.")
+    return {
+        "id": f"{program}-R{rid:03d}",
+        "kind": kind,
+        "condition": cond,
+        "action": action,
+        "statement": statement,
+        "fields": fields,
+        "tables": [],
+        "source_evidence": f"{rel_path}:{ln}",
+        "confidence": 0.6,
+        "validation_status": "inferred",
+    }
+
+
+# --- EXEC CICS helpers (the online layer) ----------------------------------
+_CICS_BLOCK = re.compile(r"(?is)EXEC\s+CICS(.*?)END-EXEC")
+_ARG = r"('[^']*'|\"[^\"]*\"|[A-Za-z][\w-]*)"
+
+
+def _cics_arg(keyword: str, body: str) -> tuple[str, bool] | None:
+    """Return (NAME, is_literal) for a CICS option like PROGRAM('X') / FILE(WS-F)."""
+    m = re.search(rf"(?i)\b(?:{keyword})\s*\(\s*{_ARG}\s*\)", body)
+    if not m:
+        return None
+    raw = m.group(1)
+    lit = raw[0] in "'\""
+    return (raw.strip("'\"").upper(), lit)
+
+
+def _cics_edges(body: str, ln: int) -> list[dict]:
+    """Map one EXEC CICS command to MIP edges. LINK/XCTL are online program calls;
+    file/queue ops are reads/writes; MAP ops use a screen; START starts a transaction."""
+    verb_m = re.match(r"(?is)\s*([A-Z]+)", body)
+    if not verb_m:
+        return []
+    verb = verb_m.group(1).upper()
+    edges: list[dict] = []
+
+    def emit(rel, ttype, name_lit):
+        name, lit = name_lit
+        if lit:
+            edges.append({"rel": rel, "ttype": ttype, "target": name, "kind": "cics",
+                          "confidence": 1.0, "validation": "confirmed", "line": ln})
+        else:  # dynamic target (e.g. LINK PROGRAM(WS-PGM)) — kept + flagged
+            edges.append({"rel": rel, "ttype": ttype, "target": name, "kind": "cics",
+                          "confidence": 0.3, "validation": "needs_review", "line": ln})
+
+    if verb in ("LINK", "XCTL"):
+        a = _cics_arg("PROGRAM", body)
+        if a:
+            emit("CALLS", "program", a)
+    elif verb in ("READ", "READNEXT", "STARTBR"):
+        a = _cics_arg("FILE|DATASET", body)
+        if a:
+            emit("READS", "dataset", a)
+    elif verb in ("WRITE", "REWRITE", "DELETE"):
+        a = _cics_arg("FILE|DATASET", body)
+        if a:
+            emit("WRITES", "dataset", a)
+    elif verb in ("SEND", "RECEIVE"):
+        a = _cics_arg("MAP", body)
+        if a:
+            emit("USES", "screen", a)
+    elif verb == "READQ":
+        a = _cics_arg("QUEUE|QNAME", body)
+        if a:
+            emit("READS", "queue", a)
+    elif verb == "WRITEQ":
+        a = _cics_arg("QUEUE|QNAME", body)
+        if a:
+            emit("WRITES", "queue", a)
+    elif verb == "START":
+        a = _cics_arg("TRANSID", body)
+        if a:
+            emit("STARTS", "transaction", a)
+    return edges
+
+
+# --- Granular developer-view helpers (deterministic, source-cited) ----------
+
+def snippet(text: str, line: int, before: int = 1, after: int = 2) -> list[dict]:
+    """Real source lines around a 1-based line number, for a code snippet in the UI/docs.
+    Returns [{line, text}] — confirmed verbatim source, never paraphrased."""
+    src = text.splitlines()
+    lo, hi = max(1, line - before), min(len(src), line + after)
+    return [{"line": i, "text": src[i - 1].rstrip()} for i in range(lo, hi + 1)]
+
+
+def data_layout(items: list[dict]) -> list[dict]:
+    """Group parsed data items by DATA DIVISION section (FILE / WORKING-STORAGE / LINKAGE …)
+    so the FR can show the record layouts a developer must declare. Section is None for
+    items found before any SECTION header."""
+    order, groups = [], {}
+    for d in items:
+        sec = d.get("section") or "UNSPECIFIED"
+        if sec not in groups:
+            groups[sec] = []
+            order.append(sec)
+        groups[sec].append({"level": d["level"], "name": d["name"],
+                            "pic": d["pic"], "line": d["line"]})
+    return [{"section": s, "items": groups[s]} for s in order]
+
+
+def procedure_outline(text: str) -> list[dict]:
+    """Per-paragraph step list (verb + source line) — a faithful pseudocode skeleton of the
+    PROCEDURE DIVISION in execution order. Captures the leading verb of each statement line;
+    multi-line statements are represented by their first line (enough to follow the logic)."""
+    up = text.upper()
+    proc_pos = up.find("PROCEDURE DIVISION")
+    if proc_pos < 0:
+        return []
+    proc_start = _line_of(text, proc_pos)
+    lines = [(i, l) for i, l in enumerate(text.splitlines(), 1) if not _is_comment(l)]
+    out: list[dict] = []
+    cur = {"paragraph": "(main)", "steps": []}
+    seen_para = False
+    for ln, txt in lines:
+        if ln <= proc_start:
+            continue
+        pm = _PARA_RE.match(txt)
+        if pm:
+            nm = pm.group(1).upper()
+            if nm not in _NON_PARA and not nm.endswith(("DIVISION", "SECTION")):
+                if cur["steps"] or seen_para:
+                    out.append(cur)
+                cur = {"paragraph": nm, "steps": []}
+                seen_para = True
+                continue
+        s = txt.strip()
+        if not s:
+            continue
+        m = re.match(r"([A-Za-z][A-Za-z0-9-]*)", s)
+        verb = m.group(1).upper() if m else ""
+        if verb in _VERBS:
+            cur["steps"].append({"verb": verb, "text": s.rstrip(". "), "line": ln})
+    if cur["steps"]:
+        out.append(cur)
+    return out

@@ -1,0 +1,210 @@
+[
+  {
+    "artifact_type": "COBOL",
+    "asset_id": "8fdc45e419fa74cf",
+    "asset_type": "PROGRAM",
+    "attributes": {
+      "artifact_type": "COBOL",
+      "ast_summary": {
+        "complexity": 1,
+        "copy_replacing": [
+          {
+            "line": 14,
+            "text": "COPY CALLBOOK REPLACING ==:SUBPGM:== BY ==REALSUB==."
+          }
+        ],
+        "counts": {
+          "CALL": 1,
+          "COPY": 0,
+          "EXEC_SQL": 0,
+          "IF": 0,
+          "PERFORM": 0
+        },
+        "data_item_count": 2,
+        "divisions": [
+          "IDENTIFICATION",
+          "DATA",
+          "PROCEDURE"
+        ],
+        "field_flow_count": 0,
+        "paragraphs": [
+          "0000-MAIN"
+        ],
+        "program_id": "CARDADV"
+      },
+      "ast_tree": {
+        "children": [
+          {
+            "children": [
+              {
+                "children": [],
+                "label": "IDENTIFICATION",
+                "type": "division"
+              },
+              {
+                "children": [],
+                "label": "DATA",
+                "type": "division"
+              },
+              {
+                "children": [],
+                "label": "PROCEDURE",
+                "type": "division"
+              }
+            ],
+            "label": "Divisions",
+            "type": "divisions"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "label": "WS-PARM",
+                    "level": 1,
+                    "line": 9,
+                    "pic": "X(10).",
+                    "type": "data_item"
+                  },
+                  {
+                    "label": "WS-STATUS",
+                    "level": 1,
+                    "line": 10,
+                    "pic": "S9(4).",
+                    "type": "data_item"
+                  }
+                ],
+                "label": "WORKING-STORAGE",
+                "type": "section"
+              }
+            ],
+            "label": "Data Division",
+            "type": "data"
+          },
+          {
+            "children": [
+              {
+                "children": [],
+                "label": "0000-MAIN",
+                "type": "paragraph"
+              }
+            ],
+            "label": "Procedure Division",
+            "type": "procedure"
+          },
+          {
+            "children": [
+              {
+                "label": "CALLBOOK",
+                "line": 14,
+                "type": "copybook"
+              },
+              {
+                "confidence": 1.0,
+                "label": "REALSUB",
+                "line": 16,
+                "type": "call",
+                "validation_status": "confirmed"
+              }
+            ],
+            "label": "Dependencies",
+            "type": "dependencies"
+          }
+        ],
+        "complexity": 1,
+        "counts": {
+          "CALL": 1,
+          "COPY": 0,
+          "EXEC_SQL": 0,
+          "IF": 0,
+          "PERFORM": 0
+        },
+        "label": "CARDADV",
+        "parser": {
+          "advanced_available": false,
+          "effective": "copy-replacing-preprocess",
+          "requested": "reference-antlr-adapter"
+        },
+        "type": "program"
+      },
+      "classification_basis": "content:PROGRAM-ID",
+      "line_count": 15,
+      "parser": {
+        "advanced_available": false,
+        "effective": "copy-replacing-preprocess",
+        "requested": "reference-antlr-adapter"
+      },
+      "relative_path": "CARDADV"
+    },
+    "classification_basis": "content:PROGRAM-ID",
+    "confidence": 0.9,
+    "created_at": "2026-06-17T19:04:19.295790+00:00",
+    "discovery_method": "observed",
+    "display_name": "CARDADV",
+    "encoding": "utf-8",
+    "folder_path": "",
+    "member_id": "0862a6c22150ed4b",
+    "member_name": "CARDADV",
+    "relative_path": "CARDADV",
+    "run_id": "103ff427ed6a19e0",
+    "sha256": "7f148b0445ba7d4b55dbfa04a227e96f93622822f7ba4a2b978bd756b9eaa8c6",
+    "size_bytes": 671,
+    "source_folder_path": "",
+    "technical_name": "CARDADV",
+    "text_status": "TEXT",
+    "validation_status": "confirmed"
+  },
+  {
+    "artifact_type": "COPYBOOK",
+    "asset_id": "dd163122a4ee450b",
+    "asset_type": "COPYBOOK",
+    "attributes": {
+      "artifact_type": "COPYBOOK",
+      "classification_basis": "folder:copylib",
+      "line_count": 3,
+      "relative_path": "COPYLIB/CALLBOOK"
+    },
+    "classification_basis": "folder:copylib",
+    "confidence": 0.95,
+    "created_at": "2026-06-17T19:04:19.295790+00:00",
+    "discovery_method": "observed",
+    "display_name": "CALLBOOK",
+    "encoding": "utf-8",
+    "folder_path": "COPYLIB",
+    "member_id": "633462211e0c84ae",
+    "member_name": "CALLBOOK",
+    "relative_path": "COPYLIB/CALLBOOK",
+    "run_id": "103ff427ed6a19e0",
+    "sha256": "d4d3fb7c1ce8c23a049fccab812b89fbd9dca344c3008ae5effd1d7c4de5d2e9",
+    "size_bytes": 207,
+    "source_folder_path": "COPYLIB",
+    "technical_name": "CALLBOOK",
+    "text_status": "TEXT",
+    "validation_status": "confirmed"
+  },
+  {
+    "artifact_type": null,
+    "asset_id": "150815c57ed85cd1",
+    "asset_type": "PROGRAM",
+    "attributes": {
+      "reference_only": true
+    },
+    "classification_basis": null,
+    "confidence": 1.0,
+    "created_at": "2026-06-17T19:04:19.295790+00:00",
+    "discovery_method": "reference-parser",
+    "display_name": "REALSUB",
+    "encoding": null,
+    "folder_path": null,
+    "member_id": null,
+    "member_name": null,
+    "relative_path": null,
+    "run_id": "103ff427ed6a19e0",
+    "sha256": null,
+    "size_bytes": null,
+    "source_folder_path": null,
+    "technical_name": "REALSUB",
+    "text_status": null,
+    "validation_status": "confirmed"
+  }
+]

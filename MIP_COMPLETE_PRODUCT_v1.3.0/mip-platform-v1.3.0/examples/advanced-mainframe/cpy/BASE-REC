@@ -1,0 +1,2 @@
+       01 :PREFIX:-RECORD.
+          05 :PREFIX:-ID PIC X(10).

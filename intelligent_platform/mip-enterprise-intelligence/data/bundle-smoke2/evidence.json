@@ -1,0 +1,62 @@
+[
+  {
+    "confidence": 0.9,
+    "created_at": "2026-06-17T19:04:19.304790+00:00",
+    "discovery_method": "observed",
+    "entity_id": "8fdc45e419fa74cf",
+    "entity_kind": "ASSET",
+    "evidence_id": "c2b2a9f95b558bcf",
+    "evidence_text": "content:PROGRAM-ID",
+    "extractor": "mainframe_scanner_v1",
+    "line_end": null,
+    "line_start": null,
+    "run_id": "103ff427ed6a19e0",
+    "source_path": "CARDADV",
+    "validation_status": "confirmed"
+  },
+  {
+    "confidence": 1.0,
+    "created_at": "2026-06-17T19:04:19.304790+00:00",
+    "discovery_method": "reference-parser",
+    "entity_id": "ac5d712468f294f4",
+    "entity_kind": "RELATIONSHIP",
+    "evidence_id": "f2d4f623b031d500",
+    "evidence_text": "*> revealed by COPY ... REPLACING. The default parser does not expand",
+    "extractor": "mainframe_scanner_v1",
+    "line_end": 4,
+    "line_start": 4,
+    "run_id": "103ff427ed6a19e0",
+    "source_path": "CARDADV",
+    "validation_status": "confirmed"
+  },
+  {
+    "confidence": 0.9,
+    "created_at": "2026-06-17T19:04:19.304790+00:00",
+    "discovery_method": "reference-parser",
+    "entity_id": "b7806da584c28ff7",
+    "entity_kind": "RELATIONSHIP",
+    "evidence_id": "71146f5eb0ba7b96",
+    "evidence_text": "COPY CALLBOOK REPLACING ==:SUBPGM:== BY ==REALSUB==.",
+    "extractor": "mainframe_scanner_v1",
+    "line_end": 14,
+    "line_start": 14,
+    "run_id": "103ff427ed6a19e0",
+    "source_path": "CARDADV",
+    "validation_status": "confirmed"
+  },
+  {
+    "confidence": 0.95,
+    "created_at": "2026-06-17T19:04:19.303792+00:00",
+    "discovery_method": "observed",
+    "entity_id": "dd163122a4ee450b",
+    "entity_kind": "ASSET",
+    "evidence_id": "85acbb53e751dd37",
+    "evidence_text": "folder:copylib",
+    "extractor": "mainframe_scanner_v1",
+    "line_end": null,
+    "line_start": null,
+    "run_id": "103ff427ed6a19e0",
+    "source_path": "COPYLIB/CALLBOOK",
+    "validation_status": "confirmed"
+  }
+]

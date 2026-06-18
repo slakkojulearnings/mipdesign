@@ -1,0 +1,18 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. CUSTVAL.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       COPY CUSTREC.
+       PROCEDURE DIVISION.
+       VALIDATE-CUSTOMER.
+           IF CUST-ID = SPACES
+              MOVE 'E' TO CUST-STATUS
+           ELSE
+              MOVE 'A' TO CUST-STATUS
+           END-IF.
+           EXEC SQL
+              UPDATE CUSTOMER_MASTER
+                 SET LAST_VALIDATED = CURRENT TIMESTAMP
+               WHERE CUSTOMER_ID = :CUST-ID
+           END-EXEC.
+           GOBACK.

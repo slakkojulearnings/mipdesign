@@ -1,0 +1,3 @@
+       COPY BASECPY REPLACING ==:PFX:== BY ==CARD==.
+       01  EXTRA-AREA.
+           05 EXTRA-CODE PIC X(2).

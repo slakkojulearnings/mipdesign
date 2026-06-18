@@ -1,0 +1,24 @@
+[
+  {
+    "confidence": 1.0,
+    "discovery_method": "reference-parser",
+    "id": "ac5d712468f294f4",
+    "source": "8fdc45e419fa74cf",
+    "source_name": "CARDADV",
+    "target": "150815c57ed85cd1",
+    "target_name": "REALSUB",
+    "type": "CALLS",
+    "validation_status": "confirmed"
+  },
+  {
+    "confidence": 0.9,
+    "discovery_method": "reference-parser",
+    "id": "b7806da584c28ff7",
+    "source": "8fdc45e419fa74cf",
+    "source_name": "CARDADV",
+    "target": "dd163122a4ee450b",
+    "target_name": "CALLBOOK",
+    "type": "USES_COPYBOOK",
+    "validation_status": "confirmed"
+  }
+]

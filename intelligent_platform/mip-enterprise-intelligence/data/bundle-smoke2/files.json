@@ -1,0 +1,34 @@
+[
+  {
+    "absolute_path": "F:\\mip\\mip_structure\\reference-implementation\\examples\\advanced_parser\\CARDADV",
+    "artifact_type": "COBOL",
+    "asset_id": "8fdc45e419fa74cf",
+    "asset_type": "PROGRAM",
+    "confidence": 0.9,
+    "encoding": "utf-8",
+    "folder_path": "",
+    "member_name": "CARDADV",
+    "relative_path": "CARDADV",
+    "sha256": "7f148b0445ba7d4b55dbfa04a227e96f93622822f7ba4a2b978bd756b9eaa8c6",
+    "size_bytes": 671,
+    "technical_name": "CARDADV",
+    "text_status": "TEXT",
+    "validation_status": "confirmed"
+  },
+  {
+    "absolute_path": "F:\\mip\\mip_structure\\reference-implementation\\examples\\advanced_parser\\COPYLIB\\CALLBOOK",
+    "artifact_type": "COPYBOOK",
+    "asset_id": "dd163122a4ee450b",
+    "asset_type": "COPYBOOK",
+    "confidence": 0.95,
+    "encoding": "utf-8",
+    "folder_path": "COPYLIB",
+    "member_name": "CALLBOOK",
+    "relative_path": "COPYLIB/CALLBOOK",
+    "sha256": "d4d3fb7c1ce8c23a049fccab812b89fbd9dca344c3008ae5effd1d7c4de5d2e9",
+    "size_bytes": 207,
+    "technical_name": "CALLBOOK",
+    "text_status": "TEXT",
+    "validation_status": "confirmed"
+  }
+]

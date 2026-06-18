@@ -1,0 +1,3 @@
+      *> Copybook: the real subprogram name is a REPLACING placeholder (:SUBPGM:).
+      *> COPY CALLBOOK REPLACING ==:SUBPGM:== BY ==REALSUB==  ->  CALL 'REALSUB'.
+           CALL ':SUBPGM:' USING WS-PARM.
