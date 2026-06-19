@@ -10,6 +10,8 @@ from typing import Any
 
 from .models import Asset, Evidence, Relationship, SourceMember, now_iso, stable_id
 
+SCHEMA_VERSION = 1
+
 
 class AssetRepository(ABC):
     @abstractmethod
@@ -89,19 +91,57 @@ class SQLiteGraphRepository(AssetRepository, RelationshipRepository, GraphSliceR
         schema = Path(__file__).with_name("schema.sql")
         with self.connect() as conn:
             conn.executescript(schema.read_text(encoding="utf-8"))
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO schema_version(version, backend, description, applied_at)
+                VALUES (?, 'sqlite', ?, ?)
+                """,
+                (SCHEMA_VERSION, "baseline sqlite metadata graph schema", now_iso()),
+            )
 
-    def create_run(self, source_root: str, *, run_id: str | None = None) -> str:
+    def create_run(
+        self,
+        source_root: str,
+        *,
+        run_id: str | None = None,
+        config: dict[str, Any] | None = None,
+        resume: bool = False,
+    ) -> str:
         self.initialize()
         selected = run_id or stable_id("run", source_root, now_iso())
         with self.connect() as conn:
+            if not resume:
+                self._clear_run_children(conn, selected)
             conn.execute(
                 """
-                INSERT OR REPLACE INTO run_manifest(run_id, source_root, started_at, status)
-                VALUES (?, ?, ?, 'RUNNING')
+                INSERT INTO run_manifest(run_id, source_root, started_at, status, config_json)
+                VALUES (?, ?, ?, 'RUNNING', ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    source_root = excluded.source_root,
+                    status = 'RUNNING',
+                    completed_at = NULL,
+                    config_json = excluded.config_json
                 """,
-                (selected, source_root, now_iso()),
+                (selected, source_root, now_iso(), json.dumps(config or {}, sort_keys=True)),
             )
         return selected
+
+    def _clear_run_children(self, conn, run_id: str) -> None:
+        for table in (
+            "source_member",
+            "asset",
+            "relationship",
+            "evidence",
+            "root_summary",
+            "app_cluster",
+            "node_degree",
+            "graph_slice_cache",
+            "insight",
+            "validation_result",
+            "scan_progress",
+            "scan_issue",
+        ):
+            conn.execute(f"DELETE FROM {table} WHERE run_id = ?", (run_id,))
 
     def complete_run(self, run_id: str, status: str = "COMPLETED") -> None:
         with self.connect() as conn:
@@ -112,15 +152,17 @@ class SQLiteGraphRepository(AssetRepository, RelationshipRepository, GraphSliceR
                     (SELECT COUNT(*) FROM asset WHERE run_id = ?) AS asset_count,
                     (SELECT COUNT(*) FROM relationship WHERE run_id = ?) AS relationship_count,
                     (SELECT COUNT(*) FROM source_member WHERE run_id = ? AND artifact_type LIKE 'UNKNOWN%') AS unknown_count,
-                    (SELECT COUNT(*) FROM source_member WHERE run_id = ? AND is_binary = 1) AS binary_count
+                    (SELECT COUNT(*) FROM source_member WHERE run_id = ? AND is_binary = 1) AS binary_count,
+                    (SELECT COUNT(*) FROM scan_issue WHERE run_id = ?) AS warning_count
                 """,
-                (run_id, run_id, run_id, run_id, run_id),
+                (run_id, run_id, run_id, run_id, run_id, run_id),
             ).fetchone()
             conn.execute(
                 """
                 UPDATE run_manifest
                 SET completed_at = ?, status = ?, file_count = ?, asset_count = ?,
-                    relationship_count = ?, unknown_count = ?, binary_count = ?
+                    relationship_count = ?, unknown_count = ?, binary_count = ?,
+                    warning_count = ?
                 WHERE run_id = ?
                 """,
                 (
@@ -131,6 +173,7 @@ class SQLiteGraphRepository(AssetRepository, RelationshipRepository, GraphSliceR
                     counts["relationship_count"],
                     counts["unknown_count"],
                     counts["binary_count"],
+                    counts["warning_count"],
                     run_id,
                 ),
             )
@@ -417,7 +460,139 @@ class SQLiteGraphRepository(AssetRepository, RelationshipRepository, GraphSliceR
                 "run": dict(run) if run else None,
                 "assets": {row["asset_type"]: row["c"] for row in by_asset},
                 "relationships": {row["relationship_type"]: row["c"] for row in by_rel},
+                "progress": self._progress_rows(conn, run_id),
+                "issues": self._issue_summary(conn, run_id),
             }
+
+    def _progress_rows(self, conn, run_id: str) -> list[dict[str, Any]]:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM scan_progress
+            WHERE run_id = ?
+            ORDER BY started_at, phase
+            """,
+            (run_id,),
+        ).fetchall()
+        return [self._scan_progress_row(row) for row in rows]
+
+    def _issue_summary(self, conn, run_id: str) -> dict[str, int]:
+        rows = conn.execute(
+            """
+            SELECT stage || ':' || severity AS bucket, COUNT(*) c
+            FROM scan_issue
+            WHERE run_id = ?
+            GROUP BY stage, severity
+            """,
+            (run_id,),
+        ).fetchall()
+        return {row["bucket"]: row["c"] for row in rows}
+
+    def upsert_scan_progress(
+        self,
+        run_id: str,
+        phase: str,
+        *,
+        total_files: int = 0,
+        processed_files: int = 0,
+        parsed_files: int = 0,
+        cached_parse_hits: int = 0,
+        failed_files: int = 0,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        now = now_iso()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO scan_progress(
+                    run_id, phase, total_files, processed_files, parsed_files,
+                    cached_parse_hits, failed_files, started_at, updated_at, details_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(run_id, phase) DO UPDATE SET
+                    total_files = excluded.total_files,
+                    processed_files = excluded.processed_files,
+                    parsed_files = excluded.parsed_files,
+                    cached_parse_hits = excluded.cached_parse_hits,
+                    failed_files = excluded.failed_files,
+                    updated_at = excluded.updated_at,
+                    details_json = excluded.details_json
+                """,
+                (
+                    run_id,
+                    phase.upper(),
+                    total_files,
+                    processed_files,
+                    parsed_files,
+                    cached_parse_hits,
+                    failed_files,
+                    now,
+                    now,
+                    json.dumps(details or {}, sort_keys=True),
+                ),
+            )
+
+    def insert_scan_issue(
+        self,
+        run_id: str,
+        relative_path: str,
+        *,
+        stage: str,
+        severity: str,
+        error_type: str,
+        message: str,
+        details: dict[str, Any] | None = None,
+    ) -> str:
+        issue_id = stable_id(
+            run_id,
+            "scan_issue",
+            relative_path,
+            stage,
+            error_type,
+            message,
+        )
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO scan_issue(
+                    issue_id, run_id, relative_path, stage, severity, error_type,
+                    message, details_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    issue_id,
+                    run_id,
+                    relative_path,
+                    stage.upper(),
+                    severity.upper(),
+                    error_type,
+                    message[:1000],
+                    json.dumps(details or {}, sort_keys=True),
+                    now_iso(),
+                ),
+            )
+        return issue_id
+
+    def replace_validation_results(self, run_id: str, checks: list[dict[str, Any]]) -> None:
+        with self.connect() as conn:
+            conn.execute("DELETE FROM validation_result WHERE run_id = ?", (run_id,))
+            for check in checks:
+                check_name = str(check.get("check_name") or check.get("name") or "unknown")
+                validation_id = stable_id(run_id, "validation", check_name)
+                conn.execute(
+                    """
+                    INSERT INTO validation_result(
+                        validation_id, run_id, check_name, status, details_json, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        validation_id,
+                        run_id,
+                        check_name,
+                        str(check.get("status") or "unknown"),
+                        json.dumps(check.get("details") or {}, sort_keys=True),
+                        now_iso(),
+                    ),
+                )
 
     def upsert_root_summary(self, run_id: str, root_asset_id: str, payload: dict[str, Any]) -> None:
         with self.connect() as conn:
@@ -570,4 +745,10 @@ class SQLiteGraphRepository(AssetRepository, RelationshipRepository, GraphSliceR
         item = dict(row)
         if "attributes_json" in item:
             item["attributes"] = json.loads(item.pop("attributes_json"))
+        return item
+
+    @staticmethod
+    def _scan_progress_row(row) -> dict[str, Any]:
+        item = dict(row)
+        item["details"] = json.loads(item.pop("details_json"))
         return item

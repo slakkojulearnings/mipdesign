@@ -92,6 +92,14 @@ class GraphService:
                     1 for edge in visible_edges if edge["validation_status"] in RISKY_STATUSES
                 ),
             },
+            "query_limits": {
+                "requested_limit": request.limit,
+                "effective_limit": req.limit,
+                "requested_depth": request.depth,
+                "effective_depth": req.depth,
+                "relationship_fetch_limit_per_node": req.limit * 4,
+                "truncated": truncated or bool(queue),
+            },
         }
         self.repository.put_cached_slice(
             cache_key=req.cache_key,

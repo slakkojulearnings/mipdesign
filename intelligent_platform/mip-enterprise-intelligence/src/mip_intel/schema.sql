@@ -1,5 +1,12 @@
 PRAGMA foreign_keys = ON;
 
+CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY,
+    backend TEXT NOT NULL,
+    description TEXT NOT NULL,
+    applied_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS run_manifest (
     run_id TEXT PRIMARY KEY,
     source_root TEXT NOT NULL,
@@ -158,6 +165,32 @@ CREATE TABLE IF NOT EXISTS validation_result (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS scan_progress (
+    run_id TEXT NOT NULL REFERENCES run_manifest(run_id) ON DELETE CASCADE,
+    phase TEXT NOT NULL,
+    total_files INTEGER NOT NULL DEFAULT 0,
+    processed_files INTEGER NOT NULL DEFAULT 0,
+    parsed_files INTEGER NOT NULL DEFAULT 0,
+    cached_parse_hits INTEGER NOT NULL DEFAULT 0,
+    failed_files INTEGER NOT NULL DEFAULT 0,
+    started_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    details_json TEXT NOT NULL DEFAULT '{}',
+    PRIMARY KEY(run_id, phase)
+);
+
+CREATE TABLE IF NOT EXISTS scan_issue (
+    issue_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES run_manifest(run_id) ON DELETE CASCADE,
+    relative_path TEXT NOT NULL,
+    stage TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    error_type TEXT NOT NULL,
+    message TEXT NOT NULL,
+    details_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_member_run_type ON source_member(run_id, artifact_type);
 CREATE INDEX IF NOT EXISTS idx_member_run_folder ON source_member(run_id, folder_path);
 CREATE INDEX IF NOT EXISTS idx_member_run_status ON source_member(run_id, validation_status);
@@ -174,3 +207,5 @@ CREATE INDEX IF NOT EXISTS idx_root_summary_risk ON root_summary(run_id, risk_sc
 CREATE INDEX IF NOT EXISTS idx_cluster_run_risk ON app_cluster(run_id, risk_score DESC);
 CREATE INDEX IF NOT EXISTS idx_insight_run_type ON insight(run_id, insight_type);
 CREATE INDEX IF NOT EXISTS idx_parser_cache_source ON parser_result_cache(source_sha256, resolver_fingerprint);
+CREATE INDEX IF NOT EXISTS idx_scan_progress_run ON scan_progress(run_id, phase);
+CREATE INDEX IF NOT EXISTS idx_scan_issue_run_stage ON scan_issue(run_id, stage, severity);

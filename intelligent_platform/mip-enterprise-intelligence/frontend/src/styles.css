@@ -254,6 +254,17 @@ select {
   gap: 16px;
 }
 
+.architecture-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.architecture-grid .panel:nth-child(3),
+.architecture-grid .panel:nth-child(4) {
+  grid-column: 1 / -1;
+}
+
 .panel {
   background: #ffffff;
   border: 1px solid #d7dee9;
@@ -273,6 +284,12 @@ select {
   gap: 8px 16px;
 }
 
+.quality-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 14px;
+}
+
 .root-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -281,7 +298,8 @@ select {
 
 .root-card,
 .cluster-list button,
-.result-table button {
+.result-table button,
+.context-list button {
   width: 100%;
   background: #f8fafc;
   border-color: #dbe2ea;
@@ -291,13 +309,15 @@ select {
 
 .root-card:hover,
 .cluster-list button:hover,
-.result-table button:hover {
+.result-table button:hover,
+.context-list button:hover {
   border-color: #6f9ce8;
 }
 
 .root-card strong,
 .cluster-list strong,
 .result-table strong,
+.context-list strong,
 .heat-cell strong {
   display: block;
   overflow-wrap: anywhere;
@@ -305,6 +325,9 @@ select {
 
 .cluster-list,
 .result-table,
+.context-list,
+.service-list,
+.roadmap-list,
 .bars,
 .insight-list,
 .relationship-list {
@@ -313,11 +336,118 @@ select {
 }
 
 .cluster-list button,
-.result-table button {
+.result-table button,
+.context-list button {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.service-list article,
+.roadmap-list article,
+.gate-board div {
+  border: 1px solid #d7dee9;
+  border-radius: 8px;
+  padding: 11px;
+  background: #f8fafc;
+}
+
+.service-head,
+.roadmap-list article {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.service-head span,
+.roadmap-list article > div:last-child {
+  min-width: 0;
+}
+
+.service-head small,
+.roadmap-list small,
+.context-list small {
+  display: block;
+  color: #667085;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.roadmap-sequence {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  background: #2166d4;
+  color: white;
+  border-radius: 50%;
+  font-weight: 700;
+}
+
+.compact-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #4b5565;
+  font-size: 13px;
+}
+
+.step-row,
+.gate-row,
+.issue-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.step-row span,
+.gate-row span {
+  background: #e8eef7;
+  color: #31527d;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.gate-row span {
+  background: #e7f6ee;
+  color: #16643b;
+}
+
+.gate-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.gate-board span {
+  display: block;
+  color: #667085;
+  margin-top: 5px;
+  font-size: 13px;
+}
+
+.check-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.check-list div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.check-list span:last-child,
+.empty-inline {
+  color: #4b5565;
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .risk,
@@ -335,6 +465,7 @@ select {
 .risk.low,
 .status.completed,
 .status.confirmed,
+.status.passed,
 .ok {
   background: #e7f6ee;
   color: #16643b;
@@ -349,7 +480,8 @@ select {
 }
 
 .risk.high,
-.status.needs_review {
+.status.needs_review,
+.status.failed {
   background: #ffe6e6;
   color: #b42318;
 }
@@ -710,6 +842,19 @@ dd {
   overflow-wrap: anywhere;
 }
 
+.json-block {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid #d7dee9;
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 1180px) {
   .app-shell {
     grid-template-columns: 260px minmax(0, 1fr);
@@ -725,13 +870,17 @@ dd {
 @media (max-width: 860px) {
   .app-shell,
   .dashboard-grid,
-  .workbench-grid {
+  .workbench-grid,
+  .architecture-grid,
+  .gate-board {
     grid-template-columns: 1fr;
   }
 
   .workbench-grid .panel:first-child,
   .workbench-grid .panel:nth-child(4),
-  .workbench-grid .panel:nth-child(5) {
+  .workbench-grid .panel:nth-child(5),
+  .architecture-grid .panel:nth-child(3),
+  .architecture-grid .panel:nth-child(4) {
     grid-column: auto;
   }
 

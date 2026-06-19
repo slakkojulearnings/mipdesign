@@ -7,11 +7,25 @@ const query = (params) => new URLSearchParams(params).toString();
 
 export const api = {
   demo: () => fetch("/api/demo", { method: "POST" }).then(parse),
+  analyze: ({ sourceRoot, demo = false } = {}) =>
+    fetch(`/api/analyze?${query({ ...(sourceRoot ? { source_root: sourceRoot } : {}), demo })}`, {
+      method: "POST",
+    }).then(parse),
   stats: (runId = "") => fetch(`/api/stats${runId ? `?${query({ run_id: runId })}` : ""}`).then(parse),
+  runStatus: (runId) => fetch(`/api/runs/${encodeURIComponent(runId)}/status`).then(parse),
+  validate: (runId = "") => fetch(`/api/validate${runId ? `?${query({ run_id: runId })}` : ""}`).then(parse),
   roots: ({ limit = 100, runId = "" } = {}) =>
     fetch(`/api/roots?${query({ limit, ...(runId ? { run_id: runId } : {}) })}`).then(parse),
   clusters: ({ limit = 100, runId = "" } = {}) =>
     fetch(`/api/clusters?${query({ limit, ...(runId ? { run_id: runId } : {}) })}`).then(parse),
+  domainContexts: ({ limit = 50, runId = "" } = {}) =>
+    fetch(`/api/architecture/contexts?${query({ limit, ...(runId ? { run_id: runId } : {}) })}`).then(parse),
+  serviceCandidates: ({ limit = 50, runId = "" } = {}) =>
+    fetch(`/api/architecture/services?${query({ limit, ...(runId ? { run_id: runId } : {}) })}`).then(parse),
+  modernizationRoadmap: ({ limit = 50, runId = "" } = {}) =>
+    fetch(`/api/architecture/roadmap?${query({ limit, ...(runId ? { run_id: runId } : {}) })}`).then(parse),
+  insights: ({ limit = 50, runId = "" } = {}) =>
+    fetch(`/api/insights?${query({ limit, ...(runId ? { run_id: runId } : {}) })}`).then(parse),
   search: (q, { limit = 50, runId = "" } = {}) =>
     fetch(`/api/search?${query({ q, limit, ...(runId ? { run_id: runId } : {}) })}`).then(parse),
   graphSlice: ({

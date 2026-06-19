@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  Activity,
   AlertCircle,
   Boxes,
   Braces,
+  ClipboardCheck,
   Database,
   Download,
   FileJson,
@@ -12,10 +14,13 @@ import {
   Layers3,
   Network,
   RefreshCw,
+  Route,
   Search,
   ServerCog,
+  ShieldCheck,
   Sparkles,
   Table2,
+  Workflow,
 } from "lucide-react";
 import { api } from "./api";
 import "./styles.css";
@@ -34,8 +39,13 @@ const HEATMAP_PRESETS = [
 
 function App() {
   const [stats, setStats] = useState(null);
+  const [validation, setValidation] = useState(null);
   const [roots, setRoots] = useState([]);
   const [clusters, setClusters] = useState([]);
+  const [domainContexts, setDomainContexts] = useState([]);
+  const [serviceCandidates, setServiceCandidates] = useState([]);
+  const [roadmap, setRoadmap] = useState([]);
+  const [backendInsights, setBackendInsights] = useState([]);
   const [graph, setGraph] = useState(null);
   const [selected, setSelected] = useState(null);
   const [query, setQuery] = useState("");
@@ -66,16 +76,26 @@ function App() {
   const loadHome = async () => {
     setBusy(true);
     try {
-      const [s, r, c, h] = await Promise.all([
+      const [s, r, c, h, v, d, svc, road, insightPayload] = await Promise.all([
         api.stats(),
         api.roots({ limit: 100 }),
         api.clusters({ limit: 100 }),
         api.heatmap(heatmapPreset),
+        api.validate(),
+        api.domainContexts({ limit: 50 }),
+        api.serviceCandidates({ limit: 50 }),
+        api.modernizationRoadmap({ limit: 50 }),
+        api.insights({ limit: 50 }),
       ]);
       setStats(s);
       setRoots(r.roots || []);
       setClusters(c.clusters || []);
       setHeatmap(h);
+      setValidation(v);
+      setDomainContexts(d.contexts || []);
+      setServiceCandidates(svc.service_candidates || []);
+      setRoadmap(road.work_packages || []);
+      setBackendInsights(insightPayload.insights || []);
       setFocusAsset((current) => current || r.roots?.[0]?.technical_name || r.roots?.[0]?.asset_id || "");
       setMessage("");
     } catch (error) {
@@ -197,12 +217,15 @@ function App() {
     setBusy(false);
   };
 
-  const insights = useMemo(() => buildInsights({ stats, roots, clusters, graph, heatmap }), [
+  const insights = useMemo(() => buildInsights({ stats, validation, roots, clusters, graph, heatmap, roadmap, backendInsights }), [
     stats,
+    validation,
     roots,
     clusters,
     graph,
     heatmap,
+    roadmap,
+    backendInsights,
   ]);
 
   return (
@@ -234,6 +257,9 @@ function App() {
           <button className={activeTab === "workbench" ? "active" : ""} onClick={() => setActiveTab("workbench")}>
             <GitBranch size={16} /> 360 Workbench
           </button>
+          <button className={activeTab === "architecture" ? "active" : ""} onClick={() => setActiveTab("architecture")}>
+            <Workflow size={16} /> Architecture
+          </button>
           <button className={activeTab === "search" ? "active" : ""} onClick={() => setActiveTab("search")}>
             <Search size={16} /> Search Results
           </button>
@@ -264,7 +290,18 @@ function App() {
             <span className="eyebrow">Inventory to graph to reasoning</span>
             <h1>Enterprise Intelligence Explorer</h1>
           </div>
-          <ExportControls run={run} stats={stats} roots={roots} clusters={clusters} graph={graph} heatmap={heatmap} results={results} />
+          <ExportControls
+            run={run}
+            stats={stats}
+            roots={roots}
+            clusters={clusters}
+            graph={graph}
+            heatmap={heatmap}
+            results={results}
+            domainContexts={domainContexts}
+            serviceCandidates={serviceCandidates}
+            roadmap={roadmap}
+          />
         </header>
 
         {message && <div className="notice">{message}</div>}
@@ -272,6 +309,8 @@ function App() {
         <section className={activeTab === "dashboard" ? "view active" : "view"}>
           <Dashboard
             run={run}
+            stats={stats}
+            validation={validation}
             roots={roots}
             clusters={clusters}
             assetTypes={assetTypes}
@@ -317,13 +356,22 @@ function App() {
           />
         </section>
 
+        <section className={activeTab === "architecture" ? "view active" : "view"}>
+          <ArchitectureView
+            contexts={domainContexts}
+            services={serviceCandidates}
+            roadmap={roadmap}
+            onOpenGraph={(id) => openGraph(id)}
+          />
+        </section>
+
         <section className={activeTab === "search" ? "view active" : "view"}>
           <SearchResults results={results} query={query} onOpenGraph={(id) => openGraph(id)} onInspect={(id) => loadWorkbench(id)} />
         </section>
       </section>
 
       <aside className="insights-panel">
-        <InsightsPanel insights={insights} graph={graph} />
+        <InsightsPanel insights={insights} graph={graph} roadmap={roadmap} />
       </aside>
 
       <DetailDrawer selected={selected} onClose={() => setSelected(null)} />
@@ -331,7 +379,7 @@ function App() {
   );
 }
 
-function Dashboard({ run, roots, clusters, assetTypes, relationshipCounts, onOpenGraph }) {
+function Dashboard({ run, stats, validation, roots, clusters, assetTypes, relationshipCounts, onOpenGraph }) {
   const topRisk = [...roots].sort((a, b) => Number(b.risk_score || 0) - Number(a.risk_score || 0)).slice(0, 6);
   return (
     <div className="dashboard-grid">
@@ -348,6 +396,8 @@ function Dashboard({ run, roots, clusters, assetTypes, relationshipCounts, onOpe
           ))}
         </div>
       </Panel>
+
+      <ScanQualityPanel stats={stats} validation={validation} />
 
       <Panel title="Root Driver Portfolio" icon={<Network />}>
         <div className="root-grid">
@@ -383,6 +433,43 @@ function Dashboard({ run, roots, clusters, assetTypes, relationshipCounts, onOpe
         </div>
       </Panel>
     </div>
+  );
+}
+
+function ScanQualityPanel({ stats, validation }) {
+  const progress = stats?.progress || [];
+  const latest = progress[progress.length - 1] || {};
+  const issues = Object.entries(stats?.issues || {});
+  const failedChecks = (validation?.checks || []).filter((check) => check.status !== "passed");
+  return (
+    <Panel title="Scan & Parser Quality" icon={<ClipboardCheck />}>
+      <div className="quality-grid">
+        <Metric icon={<Activity />} label="Phase" value={latest.phase || "-"} />
+        <Metric icon={<Braces />} label="Parsed" value={latest.parsed_files ?? 0} />
+        <Metric icon={<Database />} label="Cache Hits" value={latest.cached_parse_hits ?? 0} />
+        <Metric icon={<AlertCircle />} label="Failed" value={latest.failed_files ?? 0} />
+      </div>
+      <div className="check-list">
+        {(validation?.checks || []).slice(0, 6).map((check) => (
+          <div key={check.check_name || check.name}>
+            <StatusPill status={check.status} />
+            <span>{check.check_name || check.name}</span>
+          </div>
+        ))}
+        {!validation && <div className="empty-inline">No validation payload.</div>}
+      </div>
+      <div className="issue-strip">
+        {issues.length ? (
+          issues.map(([bucket, count]) => (
+            <span key={bucket} className="warning">{bucket}: {count}</span>
+          ))
+        ) : (
+          <span className={failedChecks.length ? "warning" : "badge"}>
+            {failedChecks.length ? `${failedChecks.length} validation gaps` : "no scan issues"}
+          </span>
+        )}
+      </div>
+    </Panel>
   );
 }
 
@@ -604,6 +691,96 @@ function SearchResults({ results, query, onOpenGraph, onInspect }) {
   );
 }
 
+function ArchitectureView({ contexts, services, roadmap, onOpenGraph }) {
+  return (
+    <div className="architecture-grid">
+      <Panel title="Bounded Contexts" icon={<Workflow />}>
+        <div className="context-list">
+          {contexts.slice(0, 12).map((context) => (
+            <button key={context.context_id} onClick={() => context.root_asset_id && onOpenGraph(context.root_asset_id)}>
+              <span>
+                <strong>{context.name}</strong>
+                <small>{context.domain} / {context.membership_scope} / confidence {formatNumber(context.confidence)}</small>
+              </span>
+              <RiskDot value={context.risk_score} />
+            </button>
+          ))}
+          {!contexts.length && <div className="empty compact">No bounded context candidates.</div>}
+        </div>
+      </Panel>
+
+      <Panel title="Service Candidates" icon={<ServerCog />}>
+        <div className="service-list">
+          {services.slice(0, 10).map((service) => (
+            <article key={service.candidate_id}>
+              <div className="service-head">
+                <span>
+                  <strong>{service.java_service_candidate}</strong>
+                  <small>{service.package_candidate}</small>
+                </span>
+                <StatusPill status={service.validation_status} />
+              </div>
+              <div className="mini-stats">
+                <span>{service.api_candidates.length} APIs</span>
+                <span>{service.data_contracts.length} contracts</span>
+                <span>risk {formatNumber(service.risk_score)}</span>
+              </div>
+              <ul className="compact-list">
+                {service.data_contracts.slice(0, 4).map((contract) => (
+                  <li key={contract.asset_id}>{contract.technical_name} / {contract.role}</li>
+                ))}
+              </ul>
+            </article>
+          ))}
+          {!services.length && <div className="empty compact">No service candidates.</div>}
+        </div>
+      </Panel>
+
+      <Panel title="Modernization Roadmap" icon={<Route />}>
+        <div className="roadmap-list">
+          {roadmap.slice(0, 8).map((packageItem) => (
+            <article key={`${packageItem.sequence}-${packageItem.service_candidate}`}>
+              <div className="roadmap-sequence">{packageItem.sequence}</div>
+              <div>
+                <strong>{packageItem.service_candidate}</strong>
+                <small>{packageItem.bounded_context} / risk {formatNumber(packageItem.risk_score)}</small>
+                <div className="step-row">
+                  {packageItem.steps.slice(0, 4).map((step) => (
+                    <span key={step.kind}>{step.kind.replaceAll("_", " ")}</span>
+                  ))}
+                </div>
+                <div className="gate-row">
+                  {(packageItem.feedback_loop?.quality_gates || []).slice(0, 4).map((gate) => (
+                    <span key={gate}>{gate.replaceAll("_", " ")}</span>
+                  ))}
+                </div>
+              </div>
+            </article>
+          ))}
+          {!roadmap.length && <div className="empty compact">No roadmap work packages.</div>}
+        </div>
+      </Panel>
+
+      <Panel title="Feedback Gates" icon={<ShieldCheck />}>
+        <div className="gate-board">
+          <div>
+            <strong>Evidence</strong>
+            <span>parser confidence, graph boundary review, cited facts</span>
+          </div>
+          <div>
+            <strong>Regression</strong>
+            <span>golden-master tests, contract tests, dual-run reconciliation</span>
+          </div>
+          <div>
+            <strong>Operations</strong>
+            <span>rollback signal, telemetry, readiness review</span>
+          </div>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
 function GraphCanvas({ graph, onNode, onEdge }) {
   const positioned = useMemo(() => {
     if (!graph) return [];
@@ -683,6 +860,8 @@ function DetailDrawer({ selected, onClose }) {
           </dl>
           <RelationshipList title="Incoming" rows={payload.incoming} />
           <RelationshipList title="Outgoing" rows={payload.outgoing} />
+          <h3>Attributes</h3>
+          <JsonBlock value={payload.asset.attributes} />
           <h3>Evidence</h3>
           <EvidenceList rows={payload.evidence} />
         </>
@@ -694,6 +873,8 @@ function DetailDrawer({ selected, onClose }) {
             <dt>Status</dt><dd><StatusPill status={payload.relationship.validation_status} /></dd>
             <dt>Method</dt><dd>{payload.relationship.discovery_method}</dd>
           </dl>
+          <h3>Attributes</h3>
+          <JsonBlock value={payload.relationship.attributes} />
           <h3>Evidence</h3>
           <EvidenceList rows={payload.evidence} />
         </>
@@ -702,7 +883,12 @@ function DetailDrawer({ selected, onClose }) {
   );
 }
 
-function InsightsPanel({ insights, graph }) {
+function JsonBlock({ value }) {
+  if (!value || !Object.keys(value).length) return <p>No attributes recorded.</p>;
+  return <pre className="json-block">{JSON.stringify(value, null, 2)}</pre>;
+}
+
+function InsightsPanel({ insights, graph, roadmap }) {
   return (
     <section>
       <div className="panel-heading">
@@ -725,11 +911,18 @@ function InsightsPanel({ insights, graph }) {
           <span>{graph.stats?.needs_review_edges || 0} needs-review edges</span>
         </div>
       )}
+      {!!roadmap?.length && (
+        <div className="slice-summary">
+          <strong>Roadmap</strong>
+          <span>{roadmap.length} work packages</span>
+          <span>next: {roadmap[0]?.service_candidate}</span>
+        </div>
+      )}
     </section>
   );
 }
 
-function ExportControls({ run, stats, roots, clusters, graph, heatmap, results }) {
+function ExportControls({ run, stats, roots, clusters, graph, heatmap, results, domainContexts, serviceCandidates, roadmap }) {
   const exportPayload = (name, payload) => {
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -749,6 +942,9 @@ function ExportControls({ run, stats, roots, clusters, graph, heatmap, results }
       </button>
       <button onClick={() => exportPayload("mip-workbench", { results, heatmap })}>
         <Braces size={16} /> Workbench
+      </button>
+      <button onClick={() => exportPayload("mip-architecture", { domainContexts, serviceCandidates, roadmap })}>
+        <Workflow size={16} /> Architecture
       </button>
     </div>
   );
@@ -827,12 +1023,13 @@ function EvidenceList({ rows }) {
   );
 }
 
-function buildInsights({ stats, roots, clusters, graph, heatmap }) {
+function buildInsights({ stats, validation, roots, clusters, graph, heatmap, roadmap, backendInsights }) {
   const run = stats?.run || {};
   const unknowns = Number(run.unknown_count || 0);
   const relationships = Number(run.relationship_count || 0);
   const riskyRoots = roots.filter((root) => Number(root.risk_score || 0) > 0.3);
   const largestCluster = [...clusters].sort((a, b) => Number(b.asset_count || 0) - Number(a.asset_count || 0))[0];
+  const validationFailed = (validation?.checks || []).filter((check) => check.status !== "passed").length;
   const items = [
     {
       level: unknowns ? "warn" : "ok",
@@ -849,6 +1046,14 @@ function buildInsights({ stats, roots, clusters, graph, heatmap }) {
       evidence: "root_summary risk_score",
     },
   ];
+  if (validation) {
+    items.push({
+      level: validation.status === "passed" ? "ok" : "warn",
+      title: validation.status === "passed" ? "Evidence validation passed" : "Evidence validation has gaps",
+      body: `${validationFailed} validation checks need attention across the current run.`,
+      evidence: "validation_result computed read model",
+    });
+  }
   if (graph) {
     items.push({
       level: graph.stats?.needs_review_edges ? "warn" : "ok",
@@ -873,6 +1078,22 @@ function buildInsights({ stats, roots, clusters, graph, heatmap }) {
       evidence: "heatmap relationship aggregation",
     });
   }
+  if (roadmap?.length) {
+    items.push({
+      level: "info",
+      title: "Modernization roadmap ready",
+      body: `${roadmap.length} work packages are ordered by risk and confidence.`,
+      evidence: "architecture/roadmap",
+    });
+  }
+  for (const insight of (backendInsights || []).slice(0, 2)) {
+    items.push({
+      level: insight.validation_status === "needs_review" ? "warn" : "info",
+      title: insight.title,
+      body: insight.body,
+      evidence: insight.insight_type,
+    });
+  }
   if (!relationships) {
     items.push({
       level: "warn",
@@ -881,7 +1102,7 @@ function buildInsights({ stats, roots, clusters, graph, heatmap }) {
       evidence: "run_manifest relationship_count=0",
     });
   }
-  return items.slice(0, 5);
+  return items.slice(0, 7);
 }
 
 function formatNumber(value) {

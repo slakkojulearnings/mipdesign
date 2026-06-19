@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
 import re
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -30,6 +32,8 @@ FOLDER_TYPES = (
     (("bms",), "BMS_MAP"),
     (("app", "csd"), "CSD"),
     (("csd",), "CSD"),
+    (("sql",), "SQL_DDL"),
+    (("db2",), "SQL_DDL"),
     (("ddl", "dcl"), "DCLGEN"),
     (("dcl",), "DCLGEN"),
     (("ims",), "IMS"),
@@ -45,6 +49,7 @@ ASSET_BY_ARTIFACT = {
     "PROC": "PROC",
     "BMS_MAP": "MAP",
     "CSD": "CSD_RESOURCE",
+    "SQL_DDL": "SQL_SCRIPT",
     "DCLGEN": "TABLE",
     "IMS": "IMS_RESOURCE",
     "MQ": "MQ_QUEUE",
@@ -82,15 +87,48 @@ class FoundRelationship:
     attributes: dict[str, Any] | None = None
 
 
+@dataclass(frozen=True)
+class ScanConfig:
+    run_id: str | None = None
+    resume: bool = False
+    batch_size: int = 500
+    max_workers: int = 1
+    parse_timeout_seconds: float = 0.0
+    fail_fast: bool = False
+
+    @classmethod
+    def from_dict(cls, config: dict[str, Any] | None, run_id: str | None = None) -> "ScanConfig":
+        config = config or {}
+        return cls(
+            run_id=str(config.get("run_id") or run_id) if config.get("run_id") or run_id else None,
+            resume=bool(config.get("resume", False)),
+            batch_size=min(max(int(config.get("batch_size", 500)), 1), 10_000),
+            max_workers=min(max(int(config.get("max_workers", 1)), 1), 32),
+            parse_timeout_seconds=max(float(config.get("parse_timeout_seconds", 0.0)), 0.0),
+            fail_fast=bool(config.get("fail_fast", False)),
+        )
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "run_id": self.run_id,
+            "resume": self.resume,
+            "batch_size": self.batch_size,
+            "max_workers": self.max_workers,
+            "parse_timeout_seconds": self.parse_timeout_seconds,
+            "fail_fast": self.fail_fast,
+        }
+
+
 def scan_mainframe_tree(
     source_root: str | Path,
     db_path: str | Path,
     *,
     run_id: str | None = None,
+    config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """CLI-callable service function for deterministic source inventory and analysis."""
     repository = SQLiteGraphRepository(db_path)
-    return scan_mainframe_estate(source_root, repository, run_id=run_id)
+    return scan_mainframe_estate(source_root, repository, run_id=run_id, config=config)
 
 
 def scan_mainframe_estate(
@@ -98,22 +136,54 @@ def scan_mainframe_estate(
     repository: SQLiteGraphRepository,
     *,
     run_id: str | None = None,
+    config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    scan_config = ScanConfig.from_dict(config, run_id=run_id)
     root = Path(source_root)
-    selected_run_id = repository.create_run(str(root), run_id=run_id)
-    members = [_classify_path(path, root, selected_run_id) for path in _iter_files(root)]
+    selected_run_id = repository.create_run(
+        str(root),
+        run_id=scan_config.run_id,
+        config=scan_config.as_dict(),
+        resume=scan_config.resume,
+    )
+    repository.upsert_scan_progress(
+        selected_run_id, "DISCOVERING", details={"source_root": str(root), "config": scan_config.as_dict()}
+    )
+    paths = _iter_files(root)
+    repository.upsert_scan_progress(
+        selected_run_id,
+        "DISCOVERING",
+        total_files=len(paths),
+        processed_files=len(paths),
+        details={"source_root": str(root)},
+    )
+    members, scan_issues = _classify_members(paths, root, selected_run_id, repository, scan_config)
     referenced_copies = _referenced_copy_names(members)
     members = _promote_referenced_copybooks(members, referenced_copies)
     copybooks, copybook_metadata = _copybook_index(members, referenced_copies)
     resolver_fingerprint = _copybook_fingerprint(copybooks, copybook_metadata)
     resolver = copybook_resolver(copybooks, copybook_metadata)
-    cobol_analysis = {
-        item.member.member_id: _parse_cobol_cached(
-            repository, item, resolver=resolver, resolver_fingerprint=resolver_fingerprint
-        )
+    parse_items = [
+        item
         for item in members
         if item.member.artifact_type in {"COBOL", "ASSEMBLER"} and item.text
-    }
+    ]
+    repository.upsert_scan_progress(
+        selected_run_id,
+        "PARSING",
+        total_files=len(members),
+        processed_files=0,
+        parsed_files=0,
+        details={"parse_candidates": len(parse_items), "resolver_fingerprint": resolver_fingerprint},
+    )
+    cobol_analysis, parse_metrics, parse_issues = _parse_members(
+        repository,
+        parse_items,
+        resolver=resolver,
+        resolver_fingerprint=resolver_fingerprint,
+        config=scan_config,
+    )
+    scan_issues.extend(parse_issues)
 
     assets: dict[str, Asset] = {}
     member_assets: dict[str, Asset] = {}
@@ -133,19 +203,68 @@ def scan_mainframe_estate(
                     "confidence": item.member.confidence,
                 }
             )
+            _record_scan_issue(
+                repository,
+                selected_run_id,
+                item.member.relative_path,
+                stage="CLASSIFY",
+                severity="WARNING",
+                error_type=item.member.validation_status,
+                message=f"{item.member.artifact_type} classified with {item.member.validation_status}",
+                details={"confidence": item.member.confidence, "basis": item.member.classification_basis},
+            )
 
+    repository.upsert_scan_progress(
+        selected_run_id,
+        "BUILDING_GRAPH",
+        total_files=len(members),
+        processed_files=len(members),
+        parsed_files=parse_metrics["parsed_files"],
+        cached_parse_hits=parse_metrics["cached_parse_hits"],
+        failed_files=parse_metrics["failed_files"],
+        details={"asset_count": len(assets)},
+    )
     for item in members:
         source = member_assets[item.member.member_id]
         for rel in _relationships_for_member(item, source, cobol_analysis.get(item.member.member_id)):
             assets.setdefault(rel.target.asset_id, rel.target)
             relationships.append(rel)
 
+    repository.upsert_scan_progress(
+        selected_run_id,
+        "PERSISTING",
+        total_files=len(members),
+        processed_files=len(members),
+        parsed_files=parse_metrics["parsed_files"],
+        cached_parse_hits=parse_metrics["cached_parse_hits"],
+        failed_files=parse_metrics["failed_files"],
+        details={"asset_count": len(assets), "relationship_count": len(relationships)},
+    )
     _persist_graph(repository, selected_run_id, members, assets, relationships)
 
+    repository.upsert_scan_progress(
+        selected_run_id,
+        "SUMMARIZING",
+        total_files=len(members),
+        processed_files=len(members),
+        parsed_files=parse_metrics["parsed_files"],
+        cached_parse_hits=parse_metrics["cached_parse_hits"],
+        failed_files=parse_metrics["failed_files"],
+    )
     GraphService(repository).recompute_summaries(selected_run_id)
     insight_count = write_deterministic_insights(repository, selected_run_id, warnings)
     repository.complete_run(selected_run_id)
     stats = repository.stats(selected_run_id)
+    repository.upsert_scan_progress(
+        selected_run_id,
+        "COMPLETED",
+        total_files=len(members),
+        processed_files=len(members),
+        parsed_files=parse_metrics["parsed_files"],
+        cached_parse_hits=parse_metrics["cached_parse_hits"],
+        failed_files=parse_metrics["failed_files"],
+        details={"status": "COMPLETED", "issue_count": len(scan_issues)},
+    )
     return {
         "run_id": selected_run_id,
         "source_root": str(root),
@@ -154,8 +273,155 @@ def scan_mainframe_estate(
         "asset_count": stats["run"]["asset_count"] if stats["run"] else len(assets),
         "relationship_count": stats["run"]["relationship_count"] if stats["run"] else len(relationships),
         "insight_count": insight_count,
+        "parse_metrics": parse_metrics,
+        "issue_count": len(scan_issues),
         "warnings": warnings,
     }
+
+
+def _classify_members(
+    paths: list[Path],
+    root: Path,
+    run_id: str,
+    repository: SQLiteGraphRepository,
+    config: ScanConfig,
+) -> tuple[list[ClassifiedMember], list[dict[str, Any]]]:
+    members: list[ClassifiedMember] = []
+    issues: list[dict[str, Any]] = []
+    total = len(paths)
+    for index, path in enumerate(paths, 1):
+        try:
+            members.append(_classify_path(path, root, run_id))
+        except Exception as exc:
+            issue = _record_scan_issue(
+                repository,
+                run_id,
+                _relative_or_name(path, root),
+                stage="CLASSIFY",
+                severity="ERROR",
+                error_type=type(exc).__name__,
+                message=str(exc),
+            )
+            issues.append(issue)
+            if config.fail_fast:
+                raise
+        if index % config.batch_size == 0 or index == total:
+            repository.upsert_scan_progress(
+                run_id,
+                "CLASSIFYING",
+                total_files=total,
+                processed_files=index,
+                failed_files=len(issues),
+            )
+    return members, issues
+
+
+def _parse_members(
+    repository: SQLiteGraphRepository,
+    items: list[ClassifiedMember],
+    *,
+    resolver,
+    resolver_fingerprint: str,
+    config: ScanConfig,
+) -> tuple[dict[str, dict[str, Any]], dict[str, int], list[dict[str, Any]]]:
+    analysis: dict[str, dict[str, Any]] = {}
+    issues: list[dict[str, Any]] = []
+    metrics = {"parsed_files": 0, "cached_parse_hits": 0, "failed_files": 0}
+    total = len(items)
+    if config.max_workers > 1 and total > 1:
+        with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
+            futures = {
+                executor.submit(
+                    _parse_cobol_cached,
+                    repository,
+                    item,
+                    resolver=resolver,
+                    resolver_fingerprint=resolver_fingerprint,
+                    soft_timeout_seconds=config.parse_timeout_seconds,
+                ): item
+                for item in items
+            }
+            for index, future in enumerate(as_completed(futures), 1):
+                item = futures[future]
+                try:
+                    payload, issue = future.result()
+                except Exception as exc:
+                    payload = _parse_error_payload(item.text, exc)
+                    issue = _record_scan_issue(
+                        repository,
+                        item.member.run_id,
+                        item.member.relative_path,
+                        stage="PARSE",
+                        severity="ERROR",
+                        error_type=type(exc).__name__,
+                        message=str(exc),
+                        details={"parallel_worker": True},
+                    )
+                _record_parse_result(
+                    analysis,
+                    issues,
+                    metrics,
+                    item,
+                    payload,
+                    issue,
+                    config,
+                )
+                if index % config.batch_size == 0 or index == total:
+                    _update_parse_progress(repository, item.member.run_id, total, index, metrics, config)
+        return analysis, metrics, issues
+
+    for index, item in enumerate(items, 1):
+        payload, issue = _parse_cobol_cached(
+            repository,
+            item,
+            resolver=resolver,
+            resolver_fingerprint=resolver_fingerprint,
+            soft_timeout_seconds=config.parse_timeout_seconds,
+        )
+        _record_parse_result(analysis, issues, metrics, item, payload, issue, config)
+        if index % config.batch_size == 0 or index == total:
+            _update_parse_progress(repository, item.member.run_id, total, index, metrics, config)
+    return analysis, metrics, issues
+
+
+def _record_parse_result(
+    analysis: dict[str, dict[str, Any]],
+    issues: list[dict[str, Any]],
+    metrics: dict[str, int],
+    item: ClassifiedMember,
+    payload: dict[str, Any],
+    issue: dict[str, Any] | None,
+    config: ScanConfig,
+) -> None:
+    analysis[item.member.member_id] = payload
+    metrics["parsed_files"] += 1
+    if payload.get("parser", {}).get("cache_hit"):
+        metrics["cached_parse_hits"] += 1
+    if issue:
+        issues.append(issue)
+        metrics["failed_files"] += 1
+        if config.fail_fast and issue.get("severity") == "ERROR":
+            raise RuntimeError(issue["message"])
+
+
+def _update_parse_progress(
+    repository: SQLiteGraphRepository,
+    run_id: str,
+    total: int,
+    processed: int,
+    metrics: dict[str, int],
+    config: ScanConfig,
+) -> None:
+    repository.upsert_scan_progress(
+        run_id,
+        "PARSING",
+        total_files=total,
+        processed_files=processed,
+        parsed_files=metrics["parsed_files"],
+        cached_parse_hits=metrics["cached_parse_hits"],
+        failed_files=metrics["failed_files"],
+        details={"max_workers": config.max_workers},
+    )
 
 
 def _persist_graph(
@@ -467,10 +733,16 @@ def _classify(relative_path: str, payload: TextPayload) -> tuple[str, str, float
         ("JCL", "content:JCL JOB/EXEC", 0.85, r"(?m)^\s*//\S+\s+(JOB|EXEC)\b"),
         ("PROC", "content:JCL PROC", 0.85, r"(?m)^\s*//\S+\s+PROC\b"),
         ("COPYBOOK", "content:copybook level numbers", 0.70, r"(?m)^\s*(01|05|10|77)\s+\S+"),
+        (
+            "SQL_DDL",
+            "content:SQL DDL",
+            0.90,
+            r"\b(CREATE|ALTER|DROP)\s+(?:UNIQUE\s+)?(?:TABLE|INDEX|VIEW|DATABASE|BUFFERPOOL|LOCATION|(?:REGULAR|LARGE|TEMPORARY)\s+TABLESPACE|TABLESPACE)\b",
+        ),
         ("DCLGEN", "content:DECLARE TABLE", 0.90, r"\bDECLARE\s+TABLE\b"),
         ("BMS_MAP", "content:BMS macros", 0.90, r"\bDFH(MSD|MDI|MDF)\b"),
         ("MQ", "content:MQ definitions", 0.80, r"\b(DEFINE\s+QLOCAL|MQPUT|MQGET|MQOPEN)\b"),
-        ("IMS", "content:IMS definitions", 0.80, r"\b(PSBGEN|DBDGEN|PCB\s+TYPE=)\b"),
+        ("IMS", "content:IMS definitions", 0.80, r"\b(PSBGEN|DBDGEN|PCB\s+TYPE=|SEGM\s+NAME=)\b"),
         ("ASSEMBLER", "content:assembler CSECT", 0.80, r"\bCSECT\b"),
         ("SCHEDULER", "content:scheduler", 0.75, r"\b(SCHEDULE|CALENDAR|RUN\s+DAILY)\b"),
     )
@@ -583,7 +855,8 @@ def _parse_cobol_cached(
     *,
     resolver,
     resolver_fingerprint: str,
-) -> dict[str, Any]:
+    soft_timeout_seconds: float = 0.0,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
     cache_key = stable_id("parse", item.member.sha256, resolver_fingerprint, PARSER_VERSION)
     cached = repository.get_cached_parse(cache_key)
     if cached:
@@ -591,10 +864,42 @@ def _parse_cobol_cached(
         parser = dict(payload.get("parser", {}))
         parser["cache_hit"] = True
         payload["parser"] = parser
-        return payload
-    payload = parse_cobol(item.text, resolver=resolver)
+        return payload, None
+    started = time.perf_counter()
+    try:
+        payload = parse_cobol(item.text, resolver=resolver)
+    except Exception as exc:
+        payload = _parse_error_payload(item.text, exc)
+        issue = _record_scan_issue(
+            repository,
+            item.member.run_id,
+            item.member.relative_path,
+            stage="PARSE",
+            severity="ERROR",
+            error_type=type(exc).__name__,
+            message=str(exc),
+            details={"parser_version": PARSER_VERSION},
+        )
+        return payload, issue
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
     parser = dict(payload.get("parser", {}))
     parser["cache_hit"] = False
+    parser["elapsed_ms"] = elapsed_ms
+    issue = None
+    if soft_timeout_seconds and elapsed_ms > int(soft_timeout_seconds * 1000):
+        parser["soft_timeout_exceeded"] = True
+        parser["confidence"] = min(float(parser.get("confidence") or 1.0), 0.65)
+        parser["validation_status"] = "needs_review"
+        issue = _record_scan_issue(
+            repository,
+            item.member.run_id,
+            item.member.relative_path,
+            stage="PARSE",
+            severity="WARNING",
+            error_type="SoftParseTimeoutExceeded",
+            message=f"Parse took {elapsed_ms}ms, above configured soft timeout",
+            details={"elapsed_ms": elapsed_ms, "timeout_seconds": soft_timeout_seconds},
+        )
     payload["parser"] = parser
     repository.put_cached_parse(
         cache_key=cache_key,
@@ -603,7 +908,78 @@ def _parse_cobol_cached(
         parser_version=PARSER_VERSION,
         payload=payload,
     )
-    return payload
+    return payload, issue
+
+
+def _parse_error_payload(text: str, exc: Exception) -> dict[str, Any]:
+    match = re.search(r"\bPROGRAM-ID\s*\.\s*([A-Z0-9#$@_-]+)", text, re.I)
+    program = match.group(1).upper() if match else None
+    return {
+        "program_id": program,
+        "divisions": [
+            name
+            for name in ("IDENTIFICATION", "ENVIRONMENT", "DATA", "PROCEDURE")
+            if f"{name} DIVISION" in text.upper()
+        ],
+        "paragraphs": [],
+        "data_items": [],
+        "calls": [],
+        "copies": [],
+        "sql": [],
+        "cics": [],
+        "field_flows": [],
+        "counts": {},
+        "complexity": 1,
+        "expanded": False,
+        "copy_replacing": [],
+        "copy_resolution": [],
+        "dialect_profile": {},
+        "parser": {
+            "requested": "local-antlr4",
+            "effective": "parse-error",
+            "version": PARSER_VERSION,
+            "confidence": 0.2,
+            "validation_status": "needs_review",
+            "error_type": type(exc).__name__,
+        },
+    }
+
+
+def _record_scan_issue(
+    repository: SQLiteGraphRepository,
+    run_id: str,
+    relative_path: str,
+    *,
+    stage: str,
+    severity: str,
+    error_type: str,
+    message: str,
+    details: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    repository.insert_scan_issue(
+        run_id,
+        relative_path,
+        stage=stage,
+        severity=severity,
+        error_type=error_type,
+        message=message,
+        details=details,
+    )
+    return {
+        "relative_path": relative_path,
+        "stage": stage.upper(),
+        "severity": severity.upper(),
+        "error_type": error_type,
+        "message": message,
+        "details": details or {},
+    }
+
+
+def _relative_or_name(path: Path, root: Path) -> str:
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return path.name
 
 
 def _asset_for_member(item: ClassifiedMember, analysis: dict[str, Any] | None = None) -> Asset:
@@ -612,6 +988,13 @@ def _asset_for_member(item: ClassifiedMember, analysis: dict[str, Any] | None = 
     technical_name = analysis.get("program_id") if analysis and analysis.get("program_id") else _primary_name(item, artifact_type)
     status = item.member.validation_status
     confidence = item.member.confidence
+    if analysis:
+        parser = analysis.get("parser", {})
+        parser_status = str(parser.get("validation_status") or "confirmed")
+        parser_confidence = float(parser.get("confidence") or confidence)
+        if parser_status != "confirmed":
+            status = "needs_review"
+        confidence = min(confidence, parser_confidence)
     attributes = {
         "artifact_type": artifact_type,
         "relative_path": item.member.relative_path,
@@ -658,9 +1041,10 @@ def _primary_name(item: ClassifiedMember, artifact_type: str) -> str:
         "JCL": r"(?m)^\s*//([A-Z0-9#$@]+)\s+JOB\b",
         "PROC": r"(?m)^\s*//([A-Z0-9#$@]+)\s+PROC\b",
         "DCLGEN": r"\bDECLARE\s+TABLE\s+([A-Z0-9_.$#@]+)",
+        "SQL_DDL": r"\bCREATE\s+(?:(?:GLOBAL\s+TEMPORARY\s+)?TABLE|DATABASE|BUFFERPOOL|LOCATION|(?:REGULAR|LARGE|TEMPORARY)\s+TABLESPACE|TABLESPACE)\s+([A-Z0-9_.$#@]+)",
         "MQ": r"\bDEFINE\s+QLOCAL\(([^)]+)\)",
         "BMS_MAP": r"\b([A-Z0-9#$@]+)\s+DFHMSD\b",
-        "IMS": r"\b(PSBGEN|DBDGEN)\s+.*?\bNAME=([A-Z0-9#$@]+)",
+        "IMS": r"\b(?:DBDGEN\s+.*?\bNAME|PSBGEN\s+.*?\bPSBNAME)=([A-Z0-9#$@_-]+)",
         "ASSEMBLER": r"(?m)^\s*([A-Z0-9#$@]+)\s+CSECT\b",
         "SCHEDULER": r"\bSCHEDULE\s+([A-Z0-9#$@_-]+)",
     }
@@ -682,6 +1066,10 @@ def _relationships_for_member(
         return _cobol_relationships(item, source, analysis)
     if artifact_type in {"JCL", "PROC"}:
         return _jcl_relationships(item, source)
+    if artifact_type in {"SQL_DDL", "DCLGEN"}:
+        return _sql_relationships(item, source)
+    if artifact_type == "IMS":
+        return _ims_relationships(item, source)
     if artifact_type == "CSD":
         return _csd_relationships(item, source)
     if artifact_type == "SCHEDULER":
@@ -895,13 +1283,468 @@ def _cobol_relationships(
                 seen,
                 _found(item, source, "USES_QUEUE", "MQ_QUEUE", match.group(2), line_no, line, confidence=0.70),
             )
+    for rel in _vsam_file_control_relationships(item, source):
+        _append_found(found, seen, rel)
     return found
 
 
+def _vsam_file_control_relationships(item: ClassifiedMember, source: Asset) -> list[FoundRelationship]:
+    found: list[FoundRelationship] = []
+    text = "\n".join(item.lines)
+    for match in re.finditer(
+        r"\bSELECT\s+([A-Z0-9#$@_-]+)\s+ASSIGN\s+TO\s+([A-Z0-9.$#@_-]+)(.*?)(?:\.)",
+        text,
+        flags=re.I | re.S,
+    ):
+        logical_file = _clean_name(match.group(1))
+        dataset = _clean_name(match.group(2))
+        tail = match.group(3)
+        line_no = _line_for_offset(text, match.start())
+        attrs = {
+            "logical_file": logical_file,
+            "assignment": dataset,
+            "source_clause": "SELECT ASSIGN",
+        }
+        organization = re.search(r"\bORGANIZATION\s+(?:IS\s+)?([A-Z0-9_-]+)", tail, re.I)
+        access_mode = re.search(r"\bACCESS\s+MODE\s+(?:IS\s+)?([A-Z0-9_-]+)", tail, re.I)
+        record_key = re.search(r"\bRECORD\s+KEY\s+(?:IS\s+)?([A-Z0-9#$@_-]+)", tail, re.I)
+        if organization:
+            attrs["organization"] = _clean_name(organization.group(1))
+        if access_mode:
+            attrs["access_mode"] = _clean_name(access_mode.group(1))
+        if record_key:
+            attrs["record_key"] = _clean_name(record_key.group(1))
+        found.append(
+            _found(
+                item,
+                source,
+                "USES_DATASET",
+                "DATASET",
+                dataset,
+                line_no,
+                _line_at(item.lines, line_no),
+                confidence=0.90,
+                validation_status="confirmed",
+                discovery_method="observed",
+                attributes=attrs,
+            )
+        )
+    for line_no, line in enumerate(item.lines, 1):
+        if _is_cobol_comment(line):
+            continue
+        for match in re.finditer(r"\bFD\s+([A-Z0-9#$@_-]+)", line, re.I):
+            found.append(
+                _found(
+                    item,
+                    source,
+                    "DEFINES_FILE",
+                    "FILE",
+                    match.group(1),
+                    line_no,
+                    line,
+                    confidence=0.90,
+                    validation_status="confirmed",
+                    discovery_method="observed",
+                    attributes={"source_clause": "FD"},
+                )
+            )
+    return found
+
+
+def _sql_relationships(item: ClassifiedMember, source: Asset) -> list[FoundRelationship]:
+    found: list[FoundRelationship] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    text = item.text
+    for statement in _iter_sql_table_blocks(text):
+        line_no = _line_for_offset(text, statement["offset"])
+        table = statement["name"]
+        body = statement["body"]
+        attrs = {
+            "dialect": "DB2",
+            "statement": "CREATE TABLE",
+            "columns": _sql_columns(body),
+            "primary_key": _sql_primary_key(body),
+        }
+        _append_found(
+            found,
+            seen,
+            _found(
+                item,
+                source,
+                "DEFINES_TABLE",
+                "TABLE",
+                table,
+                line_no,
+                _line_at(item.lines, line_no),
+                confidence=0.95,
+                validation_status="confirmed",
+                discovery_method="observed",
+                attributes=attrs,
+            ),
+        )
+    for statement in _iter_sql_index_blocks(text):
+        line_no = _line_for_offset(text, statement["offset"])
+        attrs = {
+            "dialect": "DB2",
+            "statement": "CREATE INDEX",
+            "index_name": statement["index_name"],
+            "unique": statement["unique"],
+            "columns": [_clean_name(part.split()[0]) for part in _split_top_level_csv(statement["body"]) if part.strip()],
+        }
+        _append_found(
+            found,
+            seen,
+            _found(
+                item,
+                source,
+                "INDEXES_TABLE",
+                "TABLE",
+                statement["table_name"],
+                line_no,
+                _line_at(item.lines, line_no),
+                confidence=0.92,
+                validation_status="confirmed",
+                discovery_method="observed",
+                attributes=attrs,
+            ),
+        )
+    for match in re.finditer(r"\bDECLARE\s+TABLE\s+([A-Z0-9_.$#@]+)", text, re.I):
+        line_no = _line_for_offset(text, match.start())
+        _append_found(
+            found,
+            seen,
+            _found(
+                item,
+                source,
+                "DECLARES_TABLE",
+                "TABLE",
+                match.group(1),
+                line_no,
+                _line_at(item.lines, line_no),
+                confidence=0.92,
+                validation_status="confirmed",
+                discovery_method="observed",
+                attributes={"dialect": "DB2", "statement": "DECLARE TABLE"},
+            ),
+        )
+    for rel in _db2_infrastructure_relationships(item, source, text):
+        _append_found(found, seen, rel)
+    return found
+
+
+def _db2_infrastructure_relationships(item: ClassifiedMember, source: Asset, text: str) -> list[FoundRelationship]:
+    found: list[FoundRelationship] = []
+    rules = (
+        (
+            "DEFINES_DB2_DATABASE",
+            "DB2_DATABASE",
+            r"\bCREATE\s+DATABASE\s+([A-Z0-9_.$#@]+)",
+            "CREATE DATABASE",
+            0.94,
+        ),
+        (
+            "DEFINES_DB2_BUFFERPOOL",
+            "DB2_BUFFERPOOL",
+            r"\bCREATE\s+BUFFERPOOL\s+([A-Z0-9_.$#@]+)",
+            "CREATE BUFFERPOOL",
+            0.92,
+        ),
+        (
+            "DEFINES_DB2_TABLESPACE",
+            "DB2_TABLESPACE",
+            r"\bCREATE\s+(?:REGULAR\s+|LARGE\s+|TEMPORARY\s+)?TABLESPACE\s+([A-Z0-9_.$#@]+)",
+            "CREATE TABLESPACE",
+            0.92,
+        ),
+        (
+            "DEFINES_DB2_LOCATION",
+            "DB2_LOCATION",
+            r"\bCREATE\s+LOCATION\s+([A-Z0-9_.$#@]+)",
+            "CREATE LOCATION",
+            0.90,
+        ),
+    )
+    for rel_type, target_type, pattern, statement, confidence in rules:
+        for match in re.finditer(pattern, text, re.I):
+            line_no = _line_for_offset(text, match.start())
+            found.append(
+                _found(
+                    item,
+                    source,
+                    rel_type,
+                    target_type,
+                    match.group(1),
+                    line_no,
+                    _line_at(item.lines, line_no),
+                    confidence=confidence,
+                    validation_status="confirmed",
+                    discovery_method="observed",
+                    attributes={"dialect": "DB2", "statement": statement},
+                )
+            )
+    return found
+
+
+def _iter_sql_table_blocks(text: str) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    pattern = re.compile(r"\bCREATE\s+(?:GLOBAL\s+TEMPORARY\s+)?TABLE\s+([A-Z0-9_.$#@]+)", re.I)
+    for match in pattern.finditer(text):
+        body = _parenthesized_body_after(text, match.end())
+        if body is None:
+            continue
+        blocks.append({"name": _clean_name(match.group(1)), "body": body, "offset": match.start()})
+    return blocks
+
+
+def _iter_sql_index_blocks(text: str) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    pattern = re.compile(r"\bCREATE\s+(UNIQUE\s+)?INDEX\s+([A-Z0-9_.$#@]+)\s+ON\s+([A-Z0-9_.$#@]+)", re.I)
+    for match in pattern.finditer(text):
+        body = _parenthesized_body_after(text, match.end())
+        if body is None:
+            continue
+        blocks.append(
+            {
+                "unique": bool(match.group(1)),
+                "index_name": _clean_name(match.group(2)),
+                "table_name": _clean_name(match.group(3)),
+                "body": body,
+                "offset": match.start(),
+            }
+        )
+    return blocks
+
+
+def _parenthesized_body_after(text: str, offset: int) -> str | None:
+    start = text.find("(", offset)
+    if start < 0:
+        return None
+    depth = 0
+    for index in range(start, len(text)):
+        char = text[index]
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return text[start + 1 : index]
+    return None
+
+
+def _sql_columns(body: str) -> list[dict[str, str]]:
+    columns: list[dict[str, str]] = []
+    for raw_part in _split_top_level_csv(body):
+        part = " ".join(raw_part.strip().split())
+        if not part:
+            continue
+        upper = part.upper()
+        if upper.startswith(("PRIMARY ", "FOREIGN ", "UNIQUE ", "CHECK ", "CONSTRAINT ", "LIKE ")):
+            continue
+        pieces = part.split(maxsplit=1)
+        if len(pieces) < 2:
+            continue
+        columns.append({"name": _clean_name(pieces[0]), "definition": pieces[1]})
+    return columns
+
+
+def _sql_primary_key(body: str) -> list[str]:
+    match = re.search(r"\bPRIMARY\s+KEY\s*\((.*?)\)", body, re.I | re.S)
+    if not match:
+        return []
+    return [_clean_name(part) for part in _split_top_level_csv(match.group(1)) if part.strip()]
+
+
+def _split_top_level_csv(text: str) -> list[str]:
+    parts: list[str] = []
+    start = 0
+    depth = 0
+    quote: str | None = None
+    for index, char in enumerate(text):
+        if quote:
+            if char == quote:
+                quote = None
+            continue
+        if char in {"'", '"'}:
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth = max(depth - 1, 0)
+        elif char == "," and depth == 0:
+            parts.append(text[start:index])
+            start = index + 1
+    parts.append(text[start:])
+    return parts
+
+
+def _ims_relationships(item: ClassifiedMember, source: Asset) -> list[FoundRelationship]:
+    found: list[FoundRelationship] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    current_segment = ""
+    for line_no, line in enumerate(item.lines, 1):
+        upper = line.upper()
+        dbd = re.search(r"\bDBDGEN\s+.*?\bNAME=([A-Z0-9#$@_-]+)", upper)
+        if dbd:
+            _append_found(
+                found,
+                seen,
+                _found(
+                    item,
+                    source,
+                    "DEFINES_IMS_DATABASE",
+                    "IMS_DATABASE",
+                    dbd.group(1),
+                    line_no,
+                    line,
+                    confidence=0.95,
+                    validation_status="confirmed",
+                    discovery_method="observed",
+                    attributes={"ims_statement": "DBDGEN"},
+                ),
+            )
+        psb = re.search(r"\bPSBGEN\s+.*?\bPSBNAME=([A-Z0-9#$@_-]+)", upper)
+        if psb:
+            _append_found(
+                found,
+                seen,
+                _found(
+                    item,
+                    source,
+                    "DEFINES_IMS_PSB",
+                    "IMS_PSB",
+                    psb.group(1),
+                    line_no,
+                    line,
+                    confidence=0.95,
+                    validation_status="confirmed",
+                    discovery_method="observed",
+                    attributes={"ims_statement": "PSBGEN"},
+                ),
+            )
+        segment = re.search(r"\bSEGM\s+.*?\bNAME=([A-Z0-9#$@_-]+)", upper)
+        if segment:
+            current_segment = _clean_name(segment.group(1))
+            _append_found(
+                found,
+                seen,
+                _found(
+                    item,
+                    source,
+                    "CONTAINS_IMS_SEGMENT",
+                    "IMS_SEGMENT",
+                    current_segment,
+                    line_no,
+                    line,
+                    confidence=0.92,
+                    validation_status="confirmed",
+                    discovery_method="observed",
+                    attributes={
+                        "ims_statement": "SEGM",
+                        "parent": _ims_option(upper, "PARENT"),
+                        "bytes": _ims_option(upper, "BYTES"),
+                    },
+                ),
+            )
+        field = re.search(r"\bFIELD\s+.*?\bNAME=([A-Z0-9#$@_-]+)", upper)
+        if field:
+            attrs = {
+                "ims_statement": "FIELD",
+                "segment": current_segment,
+                "bytes": _ims_option(upper, "BYTES"),
+                "start": _ims_option(upper, "START"),
+                "field_type": _ims_option(upper, "TYPE"),
+            }
+            _append_found(
+                found,
+                seen,
+                _found(
+                    item,
+                    source,
+                    "DEFINES_IMS_FIELD",
+                    "IMS_FIELD",
+                    field.group(1),
+                    line_no,
+                    line,
+                    confidence=0.90,
+                    validation_status="confirmed",
+                    discovery_method="observed",
+                    attributes=attrs,
+                ),
+            )
+        dataset = re.search(r"\bDATASET\s+.*?\b(?:DSN|DD1)=([A-Z0-9.$#@_-]+)", upper)
+        if dataset:
+            _append_found(
+                found,
+                seen,
+                _found(
+                    item,
+                    source,
+                    "USES_DATASET",
+                    "DATASET",
+                    dataset.group(1),
+                    line_no,
+                    line,
+                    confidence=0.82,
+                    validation_status="inferred",
+                    discovery_method="observed",
+                    attributes={"ims_statement": "DATASET"},
+                ),
+            )
+        pcb = re.search(r"\bPCB\s+.*?\bDBDNAME=([A-Z0-9#$@_-]+)", upper)
+        if pcb:
+            _append_found(
+                found,
+                seen,
+                _found(
+                    item,
+                    source,
+                    "USES_IMS_DATABASE",
+                    "IMS_DATABASE",
+                    pcb.group(1),
+                    line_no,
+                    line,
+                    confidence=0.92,
+                    validation_status="confirmed",
+                    discovery_method="observed",
+                    attributes={"ims_statement": "PCB", "procopt": _ims_option(upper, "PROCOPT")},
+                ),
+            )
+        senseg = re.search(r"\bSENSEG\s+.*?\bNAME=([A-Z0-9#$@_-]+)", upper)
+        if senseg:
+            _append_found(
+                found,
+                seen,
+                _found(
+                    item,
+                    source,
+                    "USES_IMS_SEGMENT",
+                    "IMS_SEGMENT",
+                    senseg.group(1),
+                    line_no,
+                    line,
+                    confidence=0.88,
+                    validation_status="confirmed",
+                    discovery_method="observed",
+                    attributes={"ims_statement": "SENSEG", "parent": _ims_option(upper, "PARENT")},
+                ),
+            )
+    return found
+
+
+def _ims_option(line: str, option: str) -> str | None:
+    match = re.search(rf"\b{re.escape(option)}=([A-Z0-9.$#@_-]+)", line, re.I)
+    return _clean_name(match.group(1)) if match else None
+
+
+def _line_for_offset(text: str, offset: int) -> int:
+    return text.count("\n", 0, max(offset, 0)) + 1
+
+
 def _append_found(
-    found: list[FoundRelationship], seen: set[tuple[str, str, str]], rel: FoundRelationship
+    found: list[FoundRelationship], seen: set[tuple[str, str, str, str]], rel: FoundRelationship
 ) -> None:
-    key = (rel.relationship_type, rel.source_asset_id, rel.target.asset_id)
+    attrs_key = json.dumps(rel.attributes or {}, sort_keys=True, default=str)
+    key = (rel.relationship_type, rel.source_asset_id, rel.target.asset_id, attrs_key)
     if key in seen:
         return
     seen.add(key)
@@ -1127,8 +1970,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("source_root")
     parser.add_argument("--db", default="data/mip-intel.db")
     parser.add_argument("--run-id")
+    parser.add_argument("--config", default="{}")
     args = parser.parse_args(argv)
-    print(json.dumps(scan_mainframe_tree(args.source_root, args.db, run_id=args.run_id), indent=2))
+    print(
+        json.dumps(
+            scan_mainframe_tree(
+                args.source_root,
+                args.db,
+                run_id=args.run_id,
+                config=json.loads(args.config),
+            ),
+            indent=2,
+        )
+    )
     return 0
 
 

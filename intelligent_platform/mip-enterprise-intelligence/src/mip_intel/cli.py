@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,18 @@ def build_parser() -> argparse.ArgumentParser:
     clusters = sub.add_parser("clusters", help="Show application clusters")
     add_run_id(clusters)
     clusters.add_argument("--limit", type=int, default=200)
+
+    domains = sub.add_parser("domains", help="Show DDD bounded context candidates")
+    add_run_id(domains)
+    domains.add_argument("--limit", type=int, default=50)
+
+    services = sub.add_parser("service-candidates", help="Show Java service candidates from graph evidence")
+    add_run_id(services)
+    services.add_argument("--limit", type=int, default=50)
+
+    roadmap = sub.add_parser("roadmap", help="Show modernization roadmap work packages")
+    add_run_id(roadmap)
+    roadmap.add_argument("--limit", type=int, default=50)
 
     search = sub.add_parser("search", help="Search assets")
     add_run_id(search)
@@ -139,6 +152,60 @@ def normalize_global_args(argv: list[str] | None) -> list[str] | None:
     return ["--db", db_path, *normalized]
 
 
+def parse_config_arg(value: str) -> dict[str, Any]:
+    text = (value or "").strip()
+    if not text:
+        return {}
+    if text.startswith("@"):
+        return json.loads(Path(text[1:]).read_text(encoding="utf-8"))
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return _parse_relaxed_config(text)
+    if not isinstance(parsed, dict):
+        raise ValueError("--config must be a JSON object")
+    return parsed
+
+
+def _parse_relaxed_config(text: str) -> dict[str, Any]:
+    body = text.strip()
+    if body.startswith("{") and body.endswith("}"):
+        body = body[1:-1]
+    if not body:
+        return {}
+    result: dict[str, Any] = {}
+    for part in re.split(r"\s*,\s*", body):
+        if not part:
+            continue
+        if ":" in part:
+            key, raw = part.split(":", 1)
+        elif "=" in part:
+            key, raw = part.split("=", 1)
+        else:
+            raise ValueError(f"Invalid --config entry: {part}")
+        key = key.strip().strip("'\"")
+        result[key] = _parse_config_value(raw.strip().strip("'\""))
+    return result
+
+
+def _parse_config_value(value: str) -> Any:
+    lower = value.lower()
+    if lower == "true":
+        return True
+    if lower == "false":
+        return False
+    if lower in {"none", "null"}:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        return value
+
+
 def main(argv: list[str] | None = None) -> int:
     selected_argv = sys.argv[1:] if argv is None else argv
     args = build_parser().parse_args(normalize_global_args(selected_argv))
@@ -146,7 +213,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "init-demo":
         print_json(api.init_demo())
     elif args.command == "analyze":
-        config = json.loads(args.config)
+        config = parse_config_arg(args.config)
         print_json(api.analyze(args.source_root, demo=args.demo, config=config))
     elif args.command == "stats":
         print_json(api.stats(args.run_id))
@@ -158,6 +225,12 @@ def main(argv: list[str] | None = None) -> int:
         print_json(api.roots(args.run_id, limit=args.limit))
     elif args.command == "clusters":
         print_json(api.clusters(args.run_id, limit=args.limit))
+    elif args.command == "domains":
+        print_json(api.domain_contexts(args.run_id, limit=args.limit))
+    elif args.command == "service-candidates":
+        print_json(api.service_candidates(args.run_id, limit=args.limit))
+    elif args.command == "roadmap":
+        print_json(api.modernization_roadmap(args.run_id, limit=args.limit))
     elif args.command == "search":
         print_json(api.search(args.query, args.run_id, limit=args.limit, offset=args.offset))
     elif args.command == "graph-slice":

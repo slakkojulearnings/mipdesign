@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 from pathlib import Path
 from typing import Any, Callable
 
 from .demo_seed import seed_demo
+from .domain_architecture import DomainArchitectureService
 from .graph_service import GraphService
 from .models import GraphSliceRequest
 from .repositories import SQLiteGraphRepository
@@ -20,6 +22,7 @@ class IntelligenceApi:
         self.repository = SQLiteGraphRepository(db_path)
         self.repository.initialize()
         self.graph = GraphService(self.repository)
+        self.domain_architecture = DomainArchitectureService(self.repository)
 
     def init_demo(self) -> dict[str, Any]:
         run_id = seed_demo(self.repository.db_path)
@@ -92,9 +95,39 @@ class IntelligenceApi:
                     (SELECT COUNT(*) FROM relationship
                      WHERE run_id = ? AND confidence < 1.0) AS low_confidence_relationships,
                     (SELECT COUNT(*) FROM asset
-                     WHERE run_id = ? AND asset_type = 'UNRESOLVED') AS unresolved_assets
+                     WHERE run_id = ? AND asset_type = 'UNRESOLVED') AS unresolved_assets,
+                    (SELECT COUNT(*) FROM asset
+                     WHERE run_id = ? AND (confidence < 0 OR confidence > 1)) AS invalid_asset_confidence,
+                    (SELECT COUNT(*) FROM relationship
+                     WHERE run_id = ? AND (confidence < 0 OR confidence > 1)) AS invalid_relationship_confidence,
+                    (SELECT COUNT(*) FROM evidence
+                     WHERE run_id = ? AND (confidence < 0 OR confidence > 1)) AS invalid_evidence_confidence,
+                    (SELECT COUNT(*) FROM asset
+                     WHERE run_id = ? AND validation_status NOT IN ('confirmed', 'inferred', 'needs_review')) AS invalid_asset_status,
+                    (SELECT COUNT(*) FROM relationship
+                     WHERE run_id = ? AND validation_status NOT IN ('confirmed', 'inferred', 'needs_review')) AS invalid_relationship_status,
+                    (SELECT COUNT(*) FROM evidence
+                     WHERE run_id = ? AND validation_status NOT IN ('confirmed', 'inferred', 'needs_review')) AS invalid_evidence_status,
+                    (SELECT COUNT(*) FROM evidence
+                     WHERE run_id = ? AND line_start IS NOT NULL AND line_end IS NOT NULL
+                       AND line_start > line_end) AS invalid_evidence_ranges
                 """,
-                (selected, selected, selected, selected, selected, selected, selected),
+                (
+                    selected,
+                    selected,
+                    selected,
+                    selected,
+                    selected,
+                    selected,
+                    selected,
+                    selected,
+                    selected,
+                    selected,
+                    selected,
+                    selected,
+                    selected,
+                    selected,
+                ),
             ).fetchone()
         checks = [
             self._check("run_exists", stats["run"] is not None, stats["run"] or {}),
@@ -113,8 +146,30 @@ class IntelligenceApi:
                 "low_confidence_assets": row["low_confidence_assets"],
                 "low_confidence_relationships": row["low_confidence_relationships"],
             }),
+            self._check("confidence_values_in_range", (
+                row["invalid_asset_confidence"] == 0
+                and row["invalid_relationship_confidence"] == 0
+                and row["invalid_evidence_confidence"] == 0
+            ), {
+                "invalid_asset_confidence": row["invalid_asset_confidence"],
+                "invalid_relationship_confidence": row["invalid_relationship_confidence"],
+                "invalid_evidence_confidence": row["invalid_evidence_confidence"],
+            }),
+            self._check("validation_status_values_allowed", (
+                row["invalid_asset_status"] == 0
+                and row["invalid_relationship_status"] == 0
+                and row["invalid_evidence_status"] == 0
+            ), {
+                "invalid_asset_status": row["invalid_asset_status"],
+                "invalid_relationship_status": row["invalid_relationship_status"],
+                "invalid_evidence_status": row["invalid_evidence_status"],
+            }),
+            self._check("evidence_line_ranges_valid", row["invalid_evidence_ranges"] == 0, {
+                "invalid_evidence_ranges": row["invalid_evidence_ranges"],
+            }),
         ]
         failed = [check for check in checks if check["status"] != "passed"]
+        self.repository.replace_validation_results(selected, checks)
         return {
             "run_id": selected,
             "status": "failed" if failed else "passed",
@@ -127,6 +182,15 @@ class IntelligenceApi:
 
     def clusters(self, run_id: str | None = None, limit: int = 200) -> dict[str, Any]:
         return self.graph.application_clusters(self.current_run(run_id), limit=limit)
+
+    def domain_contexts(self, run_id: str | None = None, limit: int = 50) -> dict[str, Any]:
+        return self.domain_architecture.bounded_contexts(self.current_run(run_id), limit=limit)
+
+    def service_candidates(self, run_id: str | None = None, limit: int = 50) -> dict[str, Any]:
+        return self.domain_architecture.service_candidates(self.current_run(run_id), limit=limit)
+
+    def modernization_roadmap(self, run_id: str | None = None, limit: int = 50) -> dict[str, Any]:
+        return self.domain_architecture.modernization_roadmap(self.current_run(run_id), limit=limit)
 
     def search(
         self, query: str, run_id: str | None = None, limit: int = 50, offset: int = 0
@@ -238,6 +302,14 @@ class IntelligenceApi:
         fmt = format.lower()
         max_rows = min(max(limit, 1), 50000)
         with self.repository.connect() as conn:
+            totals = conn.execute(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM asset WHERE run_id = ?) AS total_assets,
+                    (SELECT COUNT(*) FROM relationship WHERE run_id = ?) AS total_relationships
+                """,
+                (selected, selected),
+            ).fetchone()
             assets = [
                 self.repository._asset_row(row)
                 for row in conn.execute(
@@ -267,10 +339,12 @@ class IntelligenceApi:
                     (selected, max_rows),
                 )
             ]
+        manifest = self._export_manifest(selected, max_rows, dict(totals), assets, relationships)
         if fmt == "cytoscape":
             return {
                 "run_id": selected,
                 "format": fmt,
+                "manifest": manifest,
                 "elements": {
                     "nodes": [{"data": {"id": item["asset_id"], **item}} for item in assets],
                     "edges": [
@@ -291,7 +365,8 @@ class IntelligenceApi:
         return {
             "run_id": selected,
             "format": "json",
-            "truncated": len(assets) == max_rows or len(relationships) == max_rows,
+            "truncated": manifest["truncated"],
+            "manifest": manifest,
             "assets": assets,
             "relationships": relationships,
         }
@@ -397,7 +472,7 @@ class IntelligenceApi:
     def _scan_adapter(scan: Callable[..., dict[str, Any]]) -> Callable[[str, Path, dict[str, Any]], dict[str, Any]]:
         def run(source_root: str, db_path: Path, config: dict[str, Any]) -> dict[str, Any]:
             run_id = config.get("run_id")
-            return scan(source_root, db_path, run_id=run_id)
+            return scan(source_root, db_path, run_id=run_id, config=config)
 
         return run
 
@@ -419,6 +494,36 @@ class IntelligenceApi:
             item["citations"] = json_loads(item.pop("citations_json"), [])
             items.append(item)
         return items
+
+    @staticmethod
+    def _export_manifest(
+        run_id: str,
+        row_limit: int,
+        totals: dict[str, Any],
+        assets: list[dict[str, Any]],
+        relationships: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        total_assets = int(totals.get("total_assets") or 0)
+        total_relationships = int(totals.get("total_relationships") or 0)
+        digest_payload = {"run_id": run_id, "assets": assets, "relationships": relationships}
+        checksum = hashlib.sha256(
+            json.dumps(digest_payload, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+        return {
+            "run_id": run_id,
+            "storage_backend": "sqlite",
+            "row_limit": row_limit,
+            "total_assets": total_assets,
+            "total_relationships": total_relationships,
+            "exported_assets": len(assets),
+            "exported_relationships": len(relationships),
+            "truncated": len(assets) < total_assets or len(relationships) < total_relationships,
+            "truncated_sections": {
+                "assets": len(assets) < total_assets,
+                "relationships": len(relationships) < total_relationships,
+            },
+            "checksum_sha256": checksum,
+        }
 
     @staticmethod
     def _check(check_name: str, passed: bool, details: dict[str, Any]) -> dict[str, Any]:
@@ -513,6 +618,18 @@ def create_fastapi_app(db_path: str | Path = "data/mip-intel.db"):
     @app.get("/clusters")
     def clusters(run_id: str | None = None, limit: int = Query(default=200, ge=1, le=500)):
         return api.clusters(run_id, limit)
+
+    @app.get("/architecture/contexts")
+    def domain_contexts(run_id: str | None = None, limit: int = Query(default=50, ge=1, le=200)):
+        return api.domain_contexts(run_id, limit)
+
+    @app.get("/architecture/services")
+    def service_candidates(run_id: str | None = None, limit: int = Query(default=50, ge=1, le=200)):
+        return api.service_candidates(run_id, limit)
+
+    @app.get("/architecture/roadmap")
+    def modernization_roadmap(run_id: str | None = None, limit: int = Query(default=50, ge=1, le=200)):
+        return api.modernization_roadmap(run_id, limit)
 
     @app.get("/search")
     def search(
