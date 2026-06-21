@@ -1,0 +1,27 @@
+{
+  "name": "phase7-10-eval",
+  "expected_nodes": [
+    {"type": "PROGRAM", "name": "CARDDB2"},
+    {"type": "DCLGEN", "name": "CARDACCT"},
+    {"type": "TABLE", "name": "CARD_ACCT"},
+    {"type": "PROGRAM", "name": "CARDCICS"},
+    {"type": "CICS_CONTRACT", "name": "CARDCICS::CICS::7::LINK"},
+    {"type": "PROGRAM", "name": "CARDFILE"},
+    {"type": "FILE_RECORD", "name": "CARDFILE::CARDIN::CARDIN-REC"},
+    {"type": "JOB", "name": "CARDJOB"},
+    {"type": "JCL_DD", "name": "CARDJOB::LOAD::OUT"}
+  ],
+  "expected_edges": [
+    {"type": "USES_DCLGEN", "source": "CARDDB2", "target": "CARDACCT"},
+    {"type": "DCLGEN_DECLARES_TABLE", "source": "CARDACCT", "target": "CARD_ACCT"},
+    {"type": "DEFINES_CICS_CONTRACT", "source": "CARDCICS", "target": "CARDCICS::CICS::7::LINK"},
+    {"type": "CONTRACT_USES_FIELD", "source": "CARDCICS::CICS::7::LINK", "target": "CARDCICS::WS-COMMAREA"},
+    {"type": "HAS_RECORD_LAYOUT", "source": "CARDIN", "target": "CARDFILE::CARDIN::CARDIN-REC"},
+    {"type": "DECLARES_DD", "source": "CARDJOB::LOAD", "target": "CARDJOB::LOAD::OUT"},
+    {"type": "BINDS_DATASET", "source": "CARDJOB::LOAD::OUT", "target": "CARD.AUTH.OUT(+1)"},
+    {"type": "CONDITION_REFERENCES_STEP", "source": "CARDJOB::COND::4", "target": "CARDJOB::LOAD"}
+  ],
+  "forbidden_edges": [
+    {"type": "CALLS", "source": "CARDDB2", "target": "WRONG"}
+  ]
+}

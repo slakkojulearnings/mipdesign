@@ -1,0 +1,7 @@
+[2m12:57:49 AM[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /architecture/services?limit=1[39m
+Error: connect ECONNREFUSED 127.0.0.1:8059
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1495:16)
+p-BK3b2jBa.js:45596:18)
+    at Server.emit (node:events:514:28)
+    at emitErrorNT (node:net:1778:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21)[39m

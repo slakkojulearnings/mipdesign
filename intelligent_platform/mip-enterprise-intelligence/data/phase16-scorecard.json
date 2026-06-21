@@ -1,0 +1,23 @@
+{
+  "name": "phase16-real-scan-smoke",
+  "version": "1",
+  "expected_members": [
+    { "path": "COBOL/PAYAUTH", "artifact_type": "COBOL" },
+    { "path": "COBOL/PAYVAL", "artifact_type": "COBOL" },
+    { "path": "COPY/CARDCOM", "artifact_type": "COPYBOOK" },
+    { "path": "DDL/CARD_ACCOUNT", "artifact_type": "SQL_DDL" }
+  ],
+  "expected_nodes": [
+    { "type": "PROGRAM", "name": "PAYAUTH" },
+    { "type": "PROGRAM", "name": "PAYVAL" },
+    { "type": "TABLE", "name": "CARD_ACCOUNT" },
+    { "type": "DB2_STATEMENT", "name": "PAYAUTH::SQL::9::SELECT::6550101FA5" },
+    { "type": "HOST_VARIABLE", "name": "PAYAUTH::WS-BAL" }
+  ],
+  "expected_edges": [
+    { "type": "CALLS", "source": "PAYAUTH", "target": "PAYVAL" },
+    { "type": "DEFINES_DB2_STATEMENT", "source": "PAYAUTH", "target": "PAYAUTH::SQL::9::SELECT::6550101FA5" },
+    { "type": "STATEMENT_READS_TABLE", "source": "PAYAUTH::SQL::9::SELECT::6550101FA5", "target": "CARD_ACCOUNT" },
+    { "type": "STATEMENT_OUTPUTS_TO_HOST_VARIABLE", "source": "PAYAUTH::SQL::9::SELECT::6550101FA5", "target": "PAYAUTH::WS-BAL" }
+  ]
+}

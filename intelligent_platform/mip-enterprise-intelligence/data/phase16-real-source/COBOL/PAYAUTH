@@ -1,0 +1,15 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PAYAUTH.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-ACCT PIC X(12).
+       01 WS-BAL  PIC S9(9)V99.
+       PROCEDURE DIVISION.
+           COPY CARDCOM.
+           EXEC SQL
+              SELECT BALANCE INTO :WS-BAL
+              FROM CARD_ACCOUNT
+              WHERE ACCOUNT_ID = :WS-ACCT
+           END-EXEC.
+           CALL 'PAYVAL'.
+           GOBACK.

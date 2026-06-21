@@ -23,7 +23,29 @@
       "Bash(ls -la /c/*.jar)",
       "Read(//f/f/mip/mip_structure/reference-implementation/**)",
       "Read(//f/f/mip/mip_structure/reference-implementation/src/**)",
-      "Bash(MIP_PARSER=advanced uv run pytest tests/test_groundtruth.py tests/test_parser.py tests/test_antlr_backend.py -q)"
+      "Bash(MIP_PARSER=advanced uv run pytest tests/test_groundtruth.py tests/test_parser.py tests/test_antlr_backend.py -q)",
+      "Bash(PYTHONPATH=src python -m pytest tests/ -q)",
+      "Bash(PYTHONPATH=src python -m pytest tests/test_phase2_parser_coverage.py tests/test_production_parser_hardening.py -q)",
+      "Bash(PYTHONPATH=src python -c \"from mip_intel.cobol_antlr import cobol_antlr; print\\('antlr available:', cobol_antlr.available\\(\\)\\)\")",
+      "Bash(PYTHONPATH=src python -)",
+      "Bash(PYTHONPATH=src python -m pytest tests/ -q -p no:cacheprovider)",
+      "Bash(PYTHONPATH=src python3 -)",
+      "Bash(py -3.13 -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(py -3.12 -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(PYTHONPATH=src py -3.13 -)",
+      "Bash(py -3.13 -)",
+      "Bash(git --no-pager diff --stat)",
+      "Bash(git --no-pager diff src/mip_intel/repositories.py src/mip_intel/api.py)",
+      "Bash(PYTHONPATH=src python -m pytest tests/test_phase1_scan_reliability.py -q)",
+      "Bash(PYTHONPATH=src python -c ' *)",
+      "Bash(PYTHONPATH=src grep -n \"resume\" src/mip_intel/ingestion.py)",
+      "Bash(rm -f \"C:/Users/srika/AppData/Local/Temp/measure_mip.py\" && echo \"temp harness removed\")",
+      "Bash(grep -rohE 'relationship_type=\"[A-Z_]+\"|\"[A-Z_]{4,}\"' /f/mip/mip_structure/intelligent_platform/mip-enterprise-intelligence/src/mip_intel/ingestion.py)",
+      "Bash(grep -oE '[A-Z_]{4,}')",
+      "Bash(grep -rohE '\"[A-Z_]{4,}\"' /f/mip/mip_structure/intelligent_platform/mip-enterprise-intelligence/src/mip_intel/ingestion.py)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\srika\\AppData\\Local\\Temp"
     ]
   }
 }

@@ -1,59 +1,88 @@
-# MIP Enterprise Intelligence
+# MIP Enterprise Intelligence Standalone
 
-Production-oriented mainframe intelligence platform for very large, extensionless
-source estates. The first implementation keeps SQLite as the system of record and
-serves bounded graph slices to a React explorer, rather than attempting to render a
-full 200K+ file enterprise graph in the browser.
+Use this folder as the portable Windows package for scanning a mainframe source
+tree into SQLite and exploring it in the React UI.
 
-## Current slice
+## Requirements
 
-- SQLite schema for runs, source members, graph nodes, graph edges, evidence, summaries,
-  graph slice cache, and insights.
-- Repository abstraction with a SQLite implementation so PostgreSQL can be added later
-  behind the same service contracts.
-- Graph services for search-first navigation, root portfolio, progressive directed graph slices,
-  application clusters, node profiles, edge evidence, heatmap/matrix summaries, and
-  export payloads.
-- ANTLR-backed COBOL extraction with COPY REPLACING, DB2/CICS facts, data
-  dictionary semantics, field lineage, paragraph flow, CALL/LINKAGE contracts,
-  CICS contracts, file I/O semantics, business-rule/transformation graph facts,
-  statement ordering, SORT/MERGE, JCL DD/GDG/return-code flow, parser cache,
-  process workers, and hard-timeout quarantine.
-- Node coverage reports for parser, copybook, call contract, data dictionary,
-  field lineage, control-flow, DB2, DCLGEN, CICS, file I/O, JCL DD binding,
-  statement ordering, SORT/MERGE, and business-rule capture.
-- Discovery excludes `.git` folders and records feedback-loop progress through
-  discovery, parsing, persistence, validation, summarization, and completion.
-- React application for dashboard, search, bounded graph view, flow diagram,
-  dependency matrix, architecture views, AST tree, required files, and detail
-  drawer.
+- Windows 10/11 or Windows Server.
+- Python 3.11 or later.
+- Node.js 18 or later.
+- Internet access once for Python/npm install, unless dependencies are already cached.
 
-## Run backend checks
+## First-Time Setup
+
+Open PowerShell in this folder:
 
 ```powershell
-cd F:\mip\mip_structure\intelligent_platform\mip-enterprise-intelligence
-python -m unittest discover -s tests
-python -m coverage run -m unittest discover -s tests
-python -m coverage report
-$env:PYTHONPATH='src'; python -m mip_intel.cli --db data\demo.db init-demo
-$env:PYTHONPATH='src'; python -m mip_intel.cli --db data\demo.db roots
-$env:PYTHONPATH='src'; python -m mip_intel.cli --db data\demo.db nodes --scope programs --limit 20
-$env:PYTHONPATH='src'; python -m mip_intel.cli --db data\demo.db graph-slice --root CRDPOST --direction downstream --depth 2 --limit 500
-$env:PYTHONPATH='src'; python -m mip_intel.cli --db data\demo.db coverage CRDPOST
-$env:PYTHONPATH='src'; python -m mip_intel.cli --db data\demo.db export --format json --limit 50000 --output data\graph-export.json
-```
+cd F:\mip\mip_structure\intelligent_platform\mip-enterprise-standalone
 
-## Run React UI
+python -m venv .venv
+.\.venv\Scripts\python -m pip install --upgrade pip
+.\.venv\Scripts\python -m pip install -e ".[api,dev]"
 
-```powershell
 cd frontend
 npm install
-npm run dev
+npm run build
+cd ..
 ```
 
-The UI expects API responses shaped like the backend service contracts in
-`src/mip_intel/api.py`.
+## Scan Source Code
 
-For the implemented parsing, clustering, insight, and export rules, see
-`IMPLEMENTATION_LOGIC.md`. For the Claude-review response and remaining
-production gaps, see `PRODUCTION_READINESS_RESPONSE.md`.
+```bat
+scan_codebase.bat "F:\path\to\source_code" data\my-estate.db my-run-001
+```
+
+Arguments:
+
+- `source_code`: required source folder.
+- `data\my-estate.db`: optional SQLite DB path. Default is `data\mip-intel.db`.
+- `my-run-001`: optional run id. Default is `manual-scan`.
+
+The scan excludes `.git` folders, writes facts to SQLite, and runs validation.
+
+## Start, Check, Stop UI
+
+```bat
+start_ui.bat data\my-estate.db
+check_ui.bat
+stop_ui.bat
+```
+
+Open the UI at:
+
+```text
+http://127.0.0.1:5174
+```
+
+Optional ports:
+
+```bat
+start_ui.bat data\my-estate.db 8010 5175
+check_ui.bat 8010 5175
+stop_ui.bat 8010 5175
+```
+
+Logs are written to `logs\`. Process ids are written to `runtime\`.
+
+## Useful CLI Checks
+
+```bat
+.\.venv\Scripts\python -m mip_intel.cli --db data\my-estate.db stats
+.\.venv\Scripts\python -m mip_intel.cli --db data\my-estate.db validate
+.\.venv\Scripts\python -m mip_intel.cli --db data\my-estate.db roots --limit 50
+.\.venv\Scripts\python -m mip_intel.cli --db data\my-estate.db search CUST --limit 20
+.\.venv\Scripts\python -m mip_intel.cli --db data\my-estate.db graph-slice --root CUST001 --direction both --depth 3 --limit 500
+```
+
+## What Is Included
+
+- Backend source under `src\`.
+- React UI under `frontend\`.
+- Built UI under `frontend\dist\`.
+- Tests under `tests\`.
+- Skills and prompts under `.agents\`, `03-skills\`, and `04-prompts\`.
+- Detailed implementation notes in `IMPLEMENTATION_LOGIC.md`.
+
+Generated folders such as `.git`, `node_modules`, `data`, `logs`, caches, and
+virtual environments are intentionally not included.
