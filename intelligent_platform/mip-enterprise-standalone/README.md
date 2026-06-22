@@ -27,6 +27,10 @@ npm run build
 cd ..
 ```
 
+For VS Code, open `mip-enterprise-standalone.code-workspace`. The package also
+includes `AGENTS.md`, `CLAUDE.md`, `.github\copilot-instructions.md`, and
+sanitized `.claude\` assets for GPT/Codex, GitHub Copilot, and Claude Code.
+
 ## Scan Source Code
 
 ```bat
