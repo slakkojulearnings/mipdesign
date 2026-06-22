@@ -66,7 +66,7 @@ function Stop-Port([int]$Port) {
             }
         }
     } catch {
-        Write-Host "Port fallback check skipped for $Port: $($_.Exception.Message)"
+        Write-Host "Port fallback check skipped for ${Port}: $($_.Exception.Message)"
     }
 }
 
@@ -149,8 +149,13 @@ function Check-Ui {
     exit 1
 }
 
-switch ($Action) {
-    "start" { Start-Ui }
-    "stop" { Stop-Ui }
-    "check" { Check-Ui }
+try {
+    switch ($Action) {
+        "start" { Start-Ui }
+        "stop" { Stop-Ui }
+        "check" { Check-Ui }
+    }
+} catch {
+    Write-Host "ERROR: $($_.Exception.Message)"
+    exit 1
 }

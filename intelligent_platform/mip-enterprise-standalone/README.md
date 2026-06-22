@@ -30,7 +30,7 @@ cd ..
 ## Scan Source Code
 
 ```bat
-scan_codebase.bat "F:\path\to\source_code" data\my-estate.db my-run-001
+.\scan_codebase.bat "F:\path\to\source_code" data\my-estate.db my-run-001
 ```
 
 Arguments:
@@ -44,9 +44,9 @@ The scan excludes `.git` folders, writes facts to SQLite, and runs validation.
 ## Start, Check, Stop UI
 
 ```bat
-start_ui.bat data\my-estate.db
-check_ui.bat
-stop_ui.bat
+.\start_ui.bat data\my-estate.db
+.\check_ui.bat
+.\stop_ui.bat
 ```
 
 Open the UI at:
@@ -58,9 +58,9 @@ http://127.0.0.1:5174
 Optional ports:
 
 ```bat
-start_ui.bat data\my-estate.db 8010 5175
-check_ui.bat 8010 5175
-stop_ui.bat 8010 5175
+.\start_ui.bat data\my-estate.db 8010 5175
+.\check_ui.bat 8010 5175
+.\stop_ui.bat 8010 5175
 ```
 
 Logs are written to `logs\`. Process ids are written to `runtime\`.
