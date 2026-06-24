@@ -42,7 +42,8 @@
       "Bash(rm -f \"C:/Users/srika/AppData/Local/Temp/measure_mip.py\" && echo \"temp harness removed\")",
       "Bash(grep -rohE 'relationship_type=\"[A-Z_]+\"|\"[A-Z_]{4,}\"' /f/mip/mip_structure/intelligent_platform/mip-enterprise-intelligence/src/mip_intel/ingestion.py)",
       "Bash(grep -oE '[A-Z_]{4,}')",
-      "Bash(grep -rohE '\"[A-Z_]{4,}\"' /f/mip/mip_structure/intelligent_platform/mip-enterprise-intelligence/src/mip_intel/ingestion.py)"
+      "Bash(grep -rohE '\"[A-Z_]{4,}\"' /f/mip/mip_structure/intelligent_platform/mip-enterprise-intelligence/src/mip_intel/ingestion.py)",
+      "Bash(PYTHONPATH=src python -m mip_intel.cli --db data/_verify.db init-demo)"
     ],
     "additionalDirectories": [
       "C:\\Users\\srika\\AppData\\Local\\Temp"
