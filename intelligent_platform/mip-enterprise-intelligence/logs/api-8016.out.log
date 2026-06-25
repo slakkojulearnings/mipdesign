@@ -28,3 +28,157 @@ INFO:     127.0.0.1:20502 - "GET /graphs/call?asset=5c6404f1e90466bb&direction=b
 INFO:     127.0.0.1:20508 - "GET /ast?asset=5c6404f1e90466bb&run_id=demo-run HTTP/1.1" 200 OK
 INFO:     127.0.0.1:20506 - "GET /graphs/dependencies?asset=5c6404f1e90466bb&direction=both&depth=4&limit=1500&run_id=demo-run HTTP/1.1" 200 OK
 INFO:     127.0.0.1:20507 - "GET /reverse/files?asset=5c6404f1e90466bb&depth=8&limit=5000&run_id=demo-run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19689 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19691 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19690 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19700 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19699 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19702 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19692 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19698 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19707 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19713 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19712 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19711 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19718 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19720 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19719 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19722 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19736 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19735 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19737 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19738 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19739 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19745 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19741 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19744 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19752 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19754 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19750 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19753 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19769 - "GET /architecture/contexts?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19765 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19766 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19767 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19771 - "GET /architecture/services?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19774 - "GET /architecture/roadmap?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19764 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19768 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19788 - "GET /architecture/contexts?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19790 - "GET /architecture/services?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19784 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19782 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19792 - "GET /architecture/roadmap?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19780 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19786 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19775 - "GET /insights?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19781 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19794 - "GET /insights?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19808 - "GET /architecture/contexts?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19811 - "GET /architecture/services?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19807 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19805 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19806 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19804 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19813 - "GET /architecture/roadmap?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19809 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19815 - "GET /insights?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19824 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19822 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19821 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19828 - "GET /architecture/contexts?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19831 - "GET /architecture/services?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19820 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19826 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19834 - "GET /architecture/roadmap?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19835 - "GET /insights?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19838 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19842 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19840 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19844 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19849 - "GET /architecture/contexts?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19851 - "GET /architecture/services?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19852 - "GET /architecture/roadmap?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19846 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19854 - "GET /insights?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19859 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19860 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19867 - "GET /architecture/contexts?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19869 - "GET /architecture/services?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19861 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19872 - "GET /architecture/roadmap?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19863 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19873 - "GET /insights?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19865 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19906 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19916 - "GET /architecture/contexts?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19908 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19912 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19910 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19918 - "GET /architecture/services?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19921 - "GET /architecture/roadmap?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19914 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19922 - "GET /insights?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19927 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19932 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19940 - "GET /architecture/contexts?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19942 - "GET /architecture/services?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19944 - "GET /architecture/roadmap?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19936 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19934 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19946 - "GET /insights?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19938 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19952 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19950 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19954 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19960 - "GET /architecture/contexts?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19963 - "GET /architecture/services?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19956 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19964 - "GET /architecture/roadmap?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19958 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19967 - "GET /insights?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19972 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19980 - "GET /architecture/contexts?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19982 - "GET /architecture/services?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19984 - "GET /architecture/roadmap?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19973 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19976 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19974 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19979 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19986 - "GET /insights?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19991 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20001 - "GET /architecture/contexts?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:20003 - "GET /architecture/services?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:20006 - "GET /architecture/roadmap?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19998 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19993 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19996 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19999 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20007 - "GET /insights?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20022 - "GET /architecture/contexts?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:20015 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20016 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20013 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20024 - "GET /architecture/services?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:20012 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20020 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20027 - "GET /architecture/roadmap?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:20028 - "GET /insights?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20034 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20036 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20038 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20044 - "GET /architecture/contexts?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:20047 - "GET /architecture/services?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:20048 - "GET /architecture/roadmap?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:20040 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20050 - "GET /insights?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20043 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20055 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20064 - "GET /architecture/contexts?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:20058 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20057 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20060 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20062 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20066 - "GET /architecture/services?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:20068 - "GET /architecture/roadmap?limit=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:20070 - "GET /insights?limit=50 HTTP/1.1" 200 OK

@@ -471,3 +471,16 @@ INFO:     127.0.0.1:39650 - "GET /nodes?scope=roots&q=&limit=200&offset=0 HTTP/1
 INFO:     127.0.0.1:39647 - "GET /architecture/services?limit=50 HTTP/1.1" 200 OK
 INFO:     127.0.0.1:39644 - "GET /architecture/contexts?limit=50 HTTP/1.1" 200 OK
 INFO:     127.0.0.1:39634 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:2349 - "GET /corrections?active_only=true HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:2354 - "GET /scorecards?limit=25 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:2341 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:2347 - "GET /heatmap?left_type=PROGRAM&right_type=TABLE&relationship_type=READS_TABLE HTTP/1.1" 200 OK
+INFO:     127.0.0.1:2342 - "GET /roots?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:2359 - "GET /architecture/contexts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:2350 - "GET /clusters?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:2374 - "GET /nodes?scope=roots&q=&limit=200&offset=0 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:2375 - "GET /performance?limit=25 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:2363 - "GET /architecture/services?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:2348 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:2369 - "GET /architecture/roadmap?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:2371 - "GET /insights?limit=50 HTTP/1.1" 200 OK

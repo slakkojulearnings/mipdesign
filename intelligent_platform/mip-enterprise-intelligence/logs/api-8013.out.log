@@ -406,3 +406,14 @@ INFO:     127.0.0.1:18760 - "GET /graphs/call?asset=CARDADV&direction=upstream&d
 INFO:     127.0.0.1:18761 - "GET /graphs/dependencies?asset=CARDADV&direction=both&depth=4&limit=1500&run_id=demo-run HTTP/1.1" 404 Not Found
 INFO:     127.0.0.1:18762 - "GET /reverse/files?asset=CARDADV&depth=8&limit=5000&run_id=demo-run HTTP/1.1" 404 Not Found
 INFO:     127.0.0.1:18763 - "GET /ast?asset=CARDADV&run_id=demo-run HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:26340 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:26455 - "GET /architecture/roadmap?limit=5 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:26461 - "GET /architecture/services?limit=5 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:26459 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:26474 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:26488 - "GET /validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:26497 - "GET /architecture/contexts?limit=5 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:26498 - "GET /architecture/roadmap?limit=5 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:26499 - "GET /architecture/services?limit=5 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:26681 - "GET /architecture/services?limit=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:26694 - "GET /architecture/services?limit=1 HTTP/1.1" 404 Not Found
