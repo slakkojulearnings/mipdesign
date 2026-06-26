@@ -14,6 +14,23 @@ export const api = {
   stats: (runId = "") => fetch(`/api/stats${runId ? `?${query({ run_id: runId })}` : ""}`).then(parse),
   runStatus: (runId) => fetch(`/api/runs/${encodeURIComponent(runId)}/status`).then(parse),
   validate: (runId = "") => fetch(`/api/validate${runId ? `?${query({ run_id: runId })}` : ""}`).then(parse),
+  enrich: ({ runId = "", topN = 100, timeout = 20, maxWorkers = 1, priority = "roots", changedOnly = false, force = false } = {}) =>
+    fetch(
+      `/api/enrich?${query({
+        top_n: topN,
+        timeout,
+        max_workers: maxWorkers,
+        priority,
+        changed_only: changedOnly,
+        force,
+        ...(runId ? { run_id: runId } : {}),
+      })}`,
+      { method: "POST" }
+    ).then(parse),
+  enrichmentCoverage: (runId = "") =>
+    fetch(`/api/enrichment/coverage${runId ? `?${query({ run_id: runId })}` : ""}`).then(parse),
+  parseStatus: (asset, runId = "") =>
+    fetch(`/api/parser/status/${encodeURIComponent(asset)}${runId ? `?${query({ run_id: runId })}` : ""}`).then(parse),
   performance: ({ runId = "", limit = 25 } = {}) =>
     fetch(`/api/performance?${query({ limit, ...(runId ? { run_id: runId } : {}) })}`).then(parse),
   corrections: ({ runId = "", entityKind = "", activeOnly = true } = {}) =>

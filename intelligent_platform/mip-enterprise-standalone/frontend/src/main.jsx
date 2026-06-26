@@ -119,6 +119,7 @@ const FLOW_EDGE_TYPES = new Set([
 function App() {
   const [stats, setStats] = useState(null);
   const [validation, setValidation] = useState(null);
+  const [enrichmentCoverage, setEnrichmentCoverage] = useState(null);
   const [performance, setPerformance] = useState(null);
   const [corrections, setCorrections] = useState([]);
   const [scorecards, setScorecards] = useState([]);
@@ -161,12 +162,13 @@ function App() {
   const loadHome = async () => {
     setBusy(true);
     try {
-      const [s, r, c, h, v, perf, correctionPayload, scorecardPayload, d, svc, road, insightPayload, nodeList] = await Promise.all([
+      const [s, r, c, h, v, enrichCov, perf, correctionPayload, scorecardPayload, d, svc, road, insightPayload, nodeList] = await Promise.all([
         api.stats(),
         api.roots({ limit: 100 }),
         api.clusters({ limit: 100 }),
         api.heatmap(heatmapPreset),
         api.validate(),
+        api.enrichmentCoverage(),
         api.performance({ limit: 25 }),
         api.corrections(),
         api.scorecards({ limit: 25 }),
@@ -181,6 +183,7 @@ function App() {
       setClusters(c.clusters || []);
       setHeatmap(h);
       setValidation(v);
+      setEnrichmentCoverage(enrichCov.coverage || null);
       setPerformance(perf);
       setCorrections(correctionPayload.corrections || []);
       setScorecards(scorecardPayload.scorecards || []);
@@ -260,7 +263,11 @@ function App() {
 
   const openNode = async (id) => {
     setSelected({ kind: "loading" });
-    setSelected({ kind: "node", payload: await api.node(id, graph?.run_id) });
+    const [nodePayload, statusPayload] = await Promise.all([
+      api.node(id, graph?.run_id),
+      api.parseStatus(id, graph?.run_id),
+    ]);
+    setSelected({ kind: "node", payload: { ...nodePayload, parser_status: statusPayload.parser_status } });
   };
 
   const openEdge = async (id) => {
@@ -333,6 +340,19 @@ function App() {
     setBusy(false);
   };
 
+  const runDeepEnrichment = async () => {
+    setBusy(true);
+    try {
+      const result = await api.enrich({ runId: run?.run_id, topN: 25, timeout: 20, maxWorkers: 1 });
+      setMessage(`Deep enrichment finished: ${result.enriched} materialized, ${result.failed} failed, ${result.skipped} skipped.`);
+      await loadHome();
+    } catch (error) {
+      setMessage(error.message || "Deep enrichment failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const insights = useMemo(() => buildInsights({ stats, validation, roots, clusters, graph, heatmap, roadmap, backendInsights }), [
     stats,
     validation,
@@ -391,6 +411,7 @@ function App() {
           <Metric icon={<Boxes />} label="Assets" value={run?.asset_count ?? "-"} />
           <Metric icon={<GitBranch />} label="Edges" value={run?.relationship_count ?? "-"} />
           <Metric icon={<AlertCircle />} label="Unknowns" value={run?.unknown_count ?? "-"} />
+          <Metric icon={<Braces />} label="Deep Parsed" value={enrichmentCoverage?.materialized ?? 0} />
         </section>
 
         <div className="sidebar-actions">
@@ -399,6 +420,9 @@ function App() {
           </button>
           <button className="ghost" onClick={loadHome} disabled={busy}>
             <RefreshCw size={16} /> Refresh
+          </button>
+          <button className="ghost" onClick={runDeepEnrichment} disabled={busy || !run?.run_id}>
+            <Braces size={16} /> Enrich 25
           </button>
         </div>
       </aside>
@@ -430,6 +454,7 @@ function App() {
             run={run}
             stats={stats}
             validation={validation}
+            enrichmentCoverage={enrichmentCoverage}
             roots={roots}
             clusters={clusters}
             assetTypes={assetTypes}
@@ -511,7 +536,7 @@ function App() {
   );
 }
 
-function Dashboard({ run, stats, validation, roots, clusters, assetTypes, relationshipCounts, onOpenGraph }) {
+function Dashboard({ run, stats, validation, enrichmentCoverage, roots, clusters, assetTypes, relationshipCounts, onOpenGraph }) {
   const topRisk = [...roots].sort((a, b) => Number(b.risk_score || 0) - Number(a.risk_score || 0)).slice(0, 6);
   return (
     <div className="dashboard-grid">
@@ -530,6 +555,16 @@ function Dashboard({ run, stats, validation, roots, clusters, assetTypes, relati
       </Panel>
 
       <ScanQualityPanel stats={stats} validation={validation} />
+
+      <Panel title="Deep Parser Coverage" icon={<Braces />}>
+        <div className="metric-grid">
+          <Metric icon={<Braces />} label="Materialized" value={enrichmentCoverage?.materialized ?? 0} />
+          <Metric icon={<Database />} label="Baseline Only" value={enrichmentCoverage?.baseline_only ?? 0} />
+          <Metric icon={<AlertCircle />} label="Failed" value={enrichmentCoverage?.failed ?? 0} />
+          <Metric icon={<ClipboardCheck />} label="Coverage" value={`${enrichmentCoverage?.enriched_pct ?? 0}%`} />
+        </div>
+        <p className="small-muted">ANTLR deep parsing is persistent enrichment. Baseline facts remain usable when coverage is incomplete.</p>
+      </Panel>
 
       <Panel title="Root Driver Portfolio" icon={<Network />}>
         <div className="root-grid">
@@ -969,6 +1004,7 @@ function ArchitectureView({ contexts, services, roadmap, onOpenGraph }) {
                 <span>{service.data_contracts.length} contracts</span>
                 <span>risk {formatNumber(service.risk_score)}</span>
               </div>
+              {!service.decision_grade && <p className="warning compact-warning">{service.decision_grade_banner}</p>}
               <ul className="compact-list">
                 {service.data_contracts.slice(0, 4).map((contract) => (
                   <li key={contract.asset_id}>{contract.technical_name} / {contract.role}</li>
@@ -988,6 +1024,7 @@ function ArchitectureView({ contexts, services, roadmap, onOpenGraph }) {
               <div>
                 <strong>{packageItem.service_candidate}</strong>
                 <small>{packageItem.bounded_context} / risk {formatNumber(packageItem.risk_score)}</small>
+                {!packageItem.decision_grade && <p className="warning compact-warning">{packageItem.decision_grade_banner}</p>}
                 <div className="step-row">
                   {packageItem.steps.slice(0, 4).map((step) => (
                     <span key={step.kind}>{step.kind.replaceAll("_", " ")}</span>
@@ -1144,6 +1181,7 @@ function DetailDrawer({ selected, onClose }) {
             <dt>Incoming</dt><dd>{payload.metrics.incoming_count}</dd>
             <dt>Data Touchpoints</dt><dd>{payload.metrics.data_touchpoints}</dd>
           </dl>
+          <ParserStatusCard status={payload.parser_status || payload.asset.attributes?.parser_status} />
           <CoverageReport report={payload.coverage_report} />
           <RelationshipList title="Incoming" rows={payload.incoming} />
           <RelationshipList title="Outgoing" rows={payload.outgoing} />
@@ -1167,6 +1205,37 @@ function DetailDrawer({ selected, onClose }) {
         </>
       )}
     </aside>
+  );
+}
+
+function ParserStatusCard({ status }) {
+  if (!status) return null;
+  return (
+    <>
+      <h3>Parser Status</h3>
+      <div className="parser-status-card">
+        <div>
+          <span>Program</span>
+          <strong>{status.program || status.asset_id || "-"}</strong>
+        </div>
+        <div>
+          <span>Baseline parser</span>
+          <strong>{status.baseline_parser || "not_available"}</strong>
+        </div>
+        <div>
+          <span>Deep parser</span>
+          <strong>{status.deep_parser || "antlr4_deep_parser"}</strong>
+        </div>
+        <div>
+          <span>Deep status</span>
+          <strong>{status.deep_parse_status || "not_requested"}</strong>
+        </div>
+        <div>
+          <span>Last deep parsed</span>
+          <strong>{status.last_deep_parsed || "-"}</strong>
+        </div>
+      </div>
+    </>
   );
 }
 

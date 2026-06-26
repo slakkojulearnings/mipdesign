@@ -41,6 +41,22 @@ def build_parser() -> argparse.ArgumentParser:
     validate = sub.add_parser("validate", help="Validate evidence and confidence coverage")
     add_run_id(validate)
 
+    enrich = sub.add_parser("enrich", help="Run persistent ANTLR deep enrichment")
+    add_run_id(enrich)
+    enrich.add_argument("--top-n", type=int, default=5000)
+    enrich.add_argument("--timeout", type=float, default=20.0)
+    enrich.add_argument("--max-workers", type=int, default=1)
+    enrich.add_argument("--priority", choices=("roots", "degree", "changed", "none"), default="roots")
+    enrich.add_argument("--changed-only", action="store_true")
+    enrich.add_argument("--force", action="store_true")
+
+    parse_status = sub.add_parser("parse-status", help="Show baseline and deep parser status for one asset")
+    add_run_id(parse_status)
+    parse_status.add_argument("asset", help="Asset id or technical name")
+
+    enrichment_coverage = sub.add_parser("enrichment-coverage", help="Show estate-level deep enrichment coverage")
+    add_run_id(enrichment_coverage)
+
     performance = sub.add_parser("performance", help="Show scan telemetry and slow file report")
     add_run_id(performance)
     performance.add_argument("--limit", type=int, default=25)
@@ -261,6 +277,22 @@ def main(argv: list[str] | None = None) -> int:
         print_json(api.run_status(args.run_id))
     elif args.command == "validate":
         print_json(api.validate(args.run_id))
+    elif args.command == "enrich":
+        print_json(
+            api.enrich(
+                args.run_id,
+                top_n=args.top_n,
+                timeout=args.timeout,
+                max_workers=args.max_workers,
+                priority=args.priority,
+                changed_only=args.changed_only,
+                force=args.force,
+            )
+        )
+    elif args.command == "parse-status":
+        print_json(api.parse_status(args.asset, args.run_id))
+    elif args.command == "enrichment-coverage":
+        print_json(api.enrichment_coverage(args.run_id))
     elif args.command == "performance":
         print_json(api.performance(args.run_id, limit=args.limit))
     elif args.command == "corrections":

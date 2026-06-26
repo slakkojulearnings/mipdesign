@@ -822,6 +822,38 @@ select {
   color: #9a5200;
 }
 
+.parser-status-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 8px;
+  margin: 8px 0 14px;
+}
+
+.parser-status-card div {
+  border: 1px solid #d7dee9;
+  border-radius: 6px;
+  padding: 8px;
+  background: #f8fafc;
+  min-width: 0;
+}
+
+.parser-status-card span,
+.parser-status-card strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.parser-status-card span {
+  color: #667085;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.compact-warning {
+  margin: 8px 0;
+  font-size: 12px;
+}
+
 .result-actions {
   display: inline-flex;
   gap: 8px;

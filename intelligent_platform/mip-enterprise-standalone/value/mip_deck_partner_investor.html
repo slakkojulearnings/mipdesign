@@ -1,0 +1,294 @@
+<title>MIP — The Backbone for Mainframe Modernization</title>
+<style>
+  :root{
+    --ground:#13132B;        /* deep indigo-ink */
+    --ground-2:#1B1B3A;      /* raised panel */
+    --text:#ECE6DA;          /* warm bone */
+    --muted:rgba(236,230,218,0.56);
+    --line:rgba(236,230,218,0.13);
+    --accent:#FF6A45;        /* warm coral — momentum/market */
+    --accent-soft:rgba(255,106,69,0.15);
+    --cool:#82A7FF;          /* periwinkle — platform/connective */
+    --serif:Georgia,"Times New Roman",times,serif;
+    --sans:-apple-system,"Segoe UI",system-ui,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","Consolas","Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden}
+  body{background:var(--ground);color:var(--text);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;line-height:1.45}
+
+  .rail{position:fixed;top:0;left:0;right:0;height:54px;z-index:40;display:flex;
+    align-items:center;justify-content:space-between;padding:0 clamp(18px,4vw,48px);
+    font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .wordmark{color:var(--text);font-weight:600}.wordmark b{color:var(--accent)}
+  .counter b{color:var(--text)}
+  .progress{position:fixed;top:0;left:0;height:2px;background:var(--accent);width:10%;z-index:41;
+    transition:width .45s cubic-bezier(.4,0,.1,1)}
+
+  .viewport{position:fixed;inset:0;overflow:hidden}
+  .track{display:flex;height:100%;will-change:transform;transition:transform .6s cubic-bezier(.55,0,.1,1)}
+  .slide{flex:0 0 100vw;height:100vh;overflow-y:auto;display:flex;flex-direction:column;
+    justify-content:center;padding:72px clamp(20px,7vw,120px) 84px;position:relative}
+
+  .eyebrow{font-family:var(--mono);font-size:clamp(11px,1.1vw,13px);letter-spacing:.22em;
+    text-transform:uppercase;color:var(--accent);display:flex;align-items:center;gap:14px;margin-bottom:26px}
+  .eyebrow .num{color:var(--muted)}.eyebrow .tick{width:26px;height:1px;background:var(--accent);opacity:.7}
+  h1{font-family:var(--serif);font-weight:700;font-size:clamp(32px,5.6vw,72px);line-height:1.04;
+    letter-spacing:-.015em;max-width:19ch}
+  h2{font-family:var(--serif);font-weight:700;font-size:clamp(27px,4.3vw,54px);line-height:1.08;
+    letter-spacing:-.01em;max-width:21ch}
+  .lede{font-size:clamp(16px,1.7vw,22px);color:var(--muted);max-width:56ch;margin-top:22px;line-height:1.5}
+  .accent{color:var(--accent)}.cool{color:var(--cool)}
+  em{font-style:normal;color:var(--text);font-weight:600}
+
+  #hero{justify-content:center}
+  #hero canvas{position:absolute;inset:0;width:100%;height:100%;z-index:0;opacity:.85}
+  .hero-inner{position:relative;z-index:1}.hero-inner h1{max-width:17ch}
+  .nav-hint{position:absolute;bottom:30px;left:clamp(20px,7vw,120px);font-family:var(--mono);
+    font-size:12px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
+  .nav-hint b{color:var(--accent)}
+
+  .tam{font-family:var(--serif);font-size:clamp(40px,8vw,104px);font-weight:700;line-height:1;
+    letter-spacing:-.02em;color:var(--accent);margin-top:8px}
+  .tam small{font-family:var(--mono);font-size:13px;letter-spacing:.12em;color:var(--muted);
+    text-transform:uppercase;display:block;margin-top:14px;font-weight:400}
+  .ph{color:var(--muted);font-style:italic;font-size:.5em}
+
+  .chain{display:flex;flex-wrap:wrap;gap:14px;margin-top:38px;max-width:1100px}
+  .node{flex:1 1 150px;min-width:140px;border:1px solid var(--line);border-radius:12px;
+    padding:18px 16px 16px;background:var(--ground-2);position:relative}
+  .node .p{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--cool);margin-bottom:8px}
+  .node .nm{font-weight:680;font-size:16px}
+  .node .st{position:absolute;top:14px;right:14px;width:7px;height:7px;border-radius:50%}
+  .st.live{background:var(--cool)}.st.road{background:var(--accent);opacity:.55}
+  .legend{display:flex;gap:24px;margin-top:20px;font-family:var(--mono);font-size:12px;color:var(--muted);flex-wrap:wrap}
+  .legend span{display:flex;align-items:center;gap:8px}.dot{width:8px;height:8px;border-radius:50%}
+
+  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;margin-top:36px;max-width:1100px}
+  .card{border:1px solid var(--line);border-radius:14px;padding:24px 22px;background:var(--ground-2)}
+  .card .k{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+  .card .t{font-weight:700;font-size:19px;margin-bottom:8px;letter-spacing:-.01em;font-family:var(--serif)}
+  .card .b{font-size:14px;color:var(--muted);line-height:1.5}
+
+  .fact{font-family:var(--mono);background:var(--ground-2);border:1px solid var(--line);
+    border-left:3px solid var(--accent);border-radius:10px;padding:22px 24px;max-width:620px;margin-top:32px}
+  .fact .claim{font-family:var(--sans);font-weight:640;font-size:18px;margin-bottom:14px;color:var(--text)}
+  .fact .row{display:flex;justify-content:space-between;gap:16px;font-size:13px;padding:7px 0;border-top:1px dashed var(--line);color:var(--muted)}
+  .fact .row span:last-child{color:var(--text)}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.08em;padding:3px 9px;border-radius:20px;background:var(--accent-soft);color:var(--accent)}
+
+  .dual{display:flex;flex-wrap:wrap;align-items:stretch;gap:16px;margin-top:34px}
+  .panel{flex:1 1 220px;border:1px solid var(--line);border-radius:14px;padding:22px;background:var(--ground-2);font-family:var(--mono)}
+  .panel .lab{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+  .panel .out{font-size:clamp(30px,4vw,46px);font-weight:700;color:var(--text);letter-spacing:-.02em}
+  .panel.java{border-top:3px solid var(--cool)}.panel.legacy{border-top:3px solid var(--muted)}
+  .eq{display:flex;align-items:center;justify-content:center;font-size:44px;color:var(--cool);font-weight:700;padding:0 4px}
+
+  .moat{margin-top:32px;max-width:900px;display:flex;flex-direction:column}
+  .moat li{list-style:none;display:flex;gap:20px;padding:18px 0;border-top:1px solid var(--line)}
+  .moat li .mi{font-family:var(--mono);color:var(--accent);font-size:14px;min-width:34px}
+  .moat li .mt{font-weight:700;font-size:18px;min-width:240px;flex:0 0 auto;font-family:var(--serif)}
+  .moat li .md{color:var(--muted);font-size:14px;line-height:1.5}
+
+  /* ecosystem */
+  .eco{display:flex;flex-wrap:wrap;gap:16px;margin-top:34px;align-items:center;max-width:1000px}
+  .hub{font-family:var(--serif);font-weight:700;font-size:22px;color:var(--ground);background:var(--accent);
+    border-radius:14px;padding:22px 26px;text-align:center;flex:0 0 auto}
+  .spokes{display:flex;flex-wrap:wrap;gap:10px;flex:1 1 300px}
+  .spoke{border:1px solid var(--line);border-radius:10px;padding:12px 16px;font-family:var(--mono);
+    font-size:13px;color:var(--text);background:var(--ground-2)}
+  .spoke b{color:var(--cool);display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px;font-weight:600}
+
+  .oneliner{font-family:var(--serif);font-size:clamp(24px,3.2vw,42px);line-height:1.2;font-weight:700;letter-spacing:-.01em;max-width:21ch;margin-top:4px}
+  .asks{display:flex;flex-wrap:wrap;gap:16px;margin-top:34px}
+  .askbox{flex:1 1 280px;border:1px solid var(--line);border-radius:14px;padding:22px;background:var(--ground-2)}
+  .askbox .who{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+  .askbox .w{font-size:16px;color:var(--text);line-height:1.5}
+
+  .dots{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:40;display:flex;gap:10px}
+  .dots button{width:8px;height:8px;border-radius:50%;border:0;padding:0;cursor:pointer;background:var(--line);transition:all .3s}
+  .dots button[aria-current="true"]{background:var(--accent);width:22px;border-radius:5px}
+  .arrows{position:fixed;bottom:18px;right:clamp(18px,4vw,48px);z-index:40;display:flex;gap:10px}
+  .arrows button{font-family:var(--mono);background:transparent;border:1px solid var(--line);color:var(--text);
+    width:42px;height:42px;border-radius:10px;cursor:pointer;font-size:17px;transition:border-color .2s,background .2s}
+  .arrows button:hover{border-color:var(--accent);background:var(--accent-soft)}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  @media (max-width:640px){.moat li{flex-direction:column;gap:6px}.moat li .mt{min-width:0}}
+  @media (prefers-reduced-motion:reduce){.track{transition:none}.progress{transition:none}}
+</style>
+
+<div class="progress" id="progress"></div>
+<div class="rail">
+  <div class="wordmark">MIP<b>·</b>Mainframe Intelligence Platform</div>
+  <div class="counter"><b id="cnum">01</b> / 10</div>
+</div>
+
+<div class="viewport"><div class="track" id="track">
+
+  <!-- 1 HERO -->
+  <section class="slide" id="hero">
+    <canvas id="curve"></canvas>
+    <div class="hero-inner">
+      <div class="eyebrow"><span class="tick"></span>The modernization backbone</div>
+      <h1>The economy runs on code no one can read. <span class="accent">MIP</span> makes it readable — and proves the rewrite is right.</h1>
+      <p class="lede">The system of record and verification layer the entire mainframe-modernization market plugs into.</p>
+    </div>
+    <div class="nav-hint">Use <b>→</b> to advance &nbsp;·&nbsp; partner &amp; investor brief</div>
+  </section>
+
+  <!-- 2 MARKET -->
+  <section class="slide">
+    <div class="eyebrow"><span class="num">01</span><span class="tick"></span>The market</div>
+    <h2>A massive market that keeps failing.</h2>
+    <div class="tam">$<span class="ph">[ your TAM ]</span><small>Spent annually trying to modernize mainframes — banking, insurance, government</small></div>
+    <p class="lede">The systems that run the economy are decades of COBOL nobody understands. Modernizing them is a multi-year, repeatedly-funded effort that overruns, stalls, or breaks production — because every program starts blind. The demand never ends; the success rate is the problem.</p>
+  </section>
+
+  <!-- 3 WHY NOW -->
+  <section class="slide">
+    <div class="eyebrow"><span class="num">02</span><span class="tick"></span>Why now</div>
+    <h2>AI made generating code cheap. That moved the value to <span class="accent">proof</span>.</h2>
+    <p class="lede">The market is flooding with code generators that can't tell you if the output is correct — confident hallucination at scale, in the one place you can't afford it.</p>
+    <p class="lede" style="color:var(--text);font-weight:600;max-width:50ch">The winner of this wave won't be the best generator. It will be the <em>system of truth</em> every generator, SI, and CIO needs to trust the result. That's the opening.</p>
+  </section>
+
+  <!-- 4 CATEGORY -->
+  <section class="slide">
+    <div class="eyebrow"><span class="num">03</span><span class="tick"></span>The category</div>
+    <h1 style="font-size:clamp(30px,5vw,64px)">Not another codegen tool. The <span class="cool">system of record</span> for modernization.</h1>
+    <p class="lede">AI tools generate. MIP knows, and verifies — a durable control plane for the estate. A new category: the layer everything else runs on, not another contender in a crowded one.</p>
+  </section>
+
+  <!-- 5 PLATFORM -->
+  <section class="slide">
+    <div class="eyebrow"><span class="num">04</span><span class="tick"></span>The platform</div>
+    <h2 style="font-size:clamp(24px,3.4vw,40px)">One backbone, the whole lifecycle. Everyone else is a workload on it.</h2>
+    <div class="chain">
+      <div class="node"><span class="st live"></span><div class="p">See</div><div class="nm">Inventory &amp; graphs</div></div>
+      <div class="node"><span class="st live"></span><div class="p">Understand</div><div class="nm">Roots &amp; journeys</div></div>
+      <div class="node"><span class="st live"></span><div class="p">Capture</div><div class="nm">Rules &amp; evidence</div></div>
+      <div class="node"><span class="st live"></span><div class="p">Decide</div><div class="nm">Roadmap</div></div>
+      <div class="node"><span class="st road"></span><div class="p">Rebuild</div><div class="nm">Grounded Java</div></div>
+      <div class="node"><span class="st road"></span><div class="p">Prove</div><div class="nm">Equivalence</div></div>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--cool)"></i>Live today — incl. fast, scalable scan + deep enrichment</span>
+      <span><i class="dot" style="background:var(--accent);opacity:.55"></i>On the roadmap — specified, in build</span>
+    </div>
+  </section>
+
+  <!-- 6 EVIDENCE / DEFENSIBLE -->
+  <section class="slide">
+    <div class="eyebrow"><span class="num">05</span><span class="tick"></span>The defensible core</div>
+    <h2>Every fact carries its source, its confidence, and an honest status.</h2>
+    <p class="lede">This is the technical moat: a generator can't claim it, and it's what makes the whole graph trustworthy enough to bet a program on.</p>
+    <div class="fact">
+      <div class="claim">CRDPOST applies a 5% late fee when an account is overdue.</div>
+      <div class="row"><span>evidence</span><span>CRDPOST.cbl : 412</span></div>
+      <div class="row"><span>confidence</span><span>0.95</span></div>
+      <div class="row"><span>status</span><span class="pill">confirmed</span></div>
+    </div>
+  </section>
+
+  <!-- 7 PROOF -->
+  <section class="slide">
+    <div class="eyebrow"><span class="num">06</span><span class="tick"></span>The moment that wins the deal</div>
+    <h2>We don't ask anyone to trust the output. We <span class="cool">prove</span> it.</h2>
+    <p class="lede">Same input, mainframe and new Java — equal to the penny. That's how a CIO signs off, and how a partner de-risks a fixed-price bid.</p>
+    <div class="dual">
+      <div class="panel legacy"><div class="lab">Mainframe — golden master</div><div class="out">$50.00</div></div>
+      <div class="eq">=</div>
+      <div class="panel java"><div class="lab">Generated Java</div><div class="out cool">$50.00</div></div>
+    </div>
+    <p class="lede" style="font-size:14px;margin-top:18px">The roadmap proof MIP is built to deliver — the equivalence gate that turns "trust us" into "here's the evidence."</p>
+  </section>
+
+  <!-- 8 WHY IT COMPOUNDS -->
+  <section class="slide">
+    <div class="eyebrow"><span class="num">07</span><span class="tick"></span>Why it compounds</div>
+    <h2 style="font-size:clamp(26px,3.6vw,46px)">A moat that grows with every engagement.</h2>
+    <ul class="moat">
+      <li><span class="mi">01</span><span class="mt">Data moat</span><span class="md">Every estate scanned enriches the graph, the ontology, and the equivalence patterns. The product gets smarter per deal — and the asset is durable across models and vendors.</span></li>
+      <li><span class="mi">02</span><span class="mt">Switching cost</span><span class="md">Once a program's system of truth lives in MIP, every workstream depends on it. It's the substrate, not a swappable step.</span></li>
+      <li><span class="mi">03</span><span class="mt">Can't be disintermediated</span><span class="md">LLMs and codegen commoditize and rotate. The verified knowledge layer they plug into is the part that holds value.</span></li>
+    </ul>
+  </section>
+
+  <!-- 9 ECOSYSTEM / MODEL -->
+  <section class="slide">
+    <div class="eyebrow"><span class="num">08</span><span class="tick"></span>The ecosystem</div>
+    <h2 style="font-size:clamp(24px,3.4vw,40px)">MIP at the center. Everyone else plugs in — and wins.</h2>
+    <div class="eco">
+      <div class="hub">MIP<br><span style="font-size:12px;font-family:var(--mono);font-weight:400">system of record</span></div>
+      <div class="spokes">
+        <div class="spoke"><b>System Integrators</b>Faster discovery, safe sequencing, fixed-bid confidence — a delivery accelerator and a differentiator.</div>
+        <div class="spoke"><b>AI codegen / LLMs</b>Grounded inputs &amp; a verification gate — interchangeable workers on MIP's rails.</div>
+        <div class="spoke"><b>Enterprises</b>Vendor-neutral control plane; capture SME knowledge before it retires.</div>
+        <div class="spoke"><b>Test &amp; QA tools</b>Characterization tests &amp; equivalence evidence, generated from the graph.</div>
+      </div>
+    </div>
+    <p class="lede" style="margin-top:24px">For a partner: more wins, higher margin, less delivery risk. For the platform: a channel that compounds the data moat with every program.</p>
+  </section>
+
+  <!-- 10 ASK -->
+  <section class="slide">
+    <div class="eyebrow"><span class="num">09</span><span class="tick"></span>The ask</div>
+    <p class="oneliner">The only platform that tells you what your mainframe does — and <span class="cool">proves</span> your replacement does the same.</p>
+    <div class="asks">
+      <div class="askbox"><div class="who">Partners</div><div class="w">Co-deliver one lighthouse journey — discover, rebuild, prove equivalent — against a measurable pass target. Make it the reference for your practice.</div></div>
+      <div class="askbox"><div class="who">Investors</div><div class="w">The category is forming now, while the market mistakes generation for the hard part. Back the system of truth the whole wave will depend on.</div></div>
+    </div>
+  </section>
+
+</div></div>
+
+<div class="dots" id="dots"></div>
+<div class="arrows"><button id="prev" aria-label="Previous slide">‹</button><button id="next" aria-label="Next slide">›</button></div>
+
+<script>
+  (function(){
+    var track=document.getElementById('track'),slides=Array.from(track.children),n=slides.length,i=0;
+    var dotsWrap=document.getElementById('dots'),progress=document.getElementById('progress'),cnum=document.getElementById('cnum');
+    slides.forEach(function(_,k){var b=document.createElement('button');b.setAttribute('aria-label','Slide '+(k+1));b.addEventListener('click',function(){go(k)});dotsWrap.appendChild(b)});
+    var dots=Array.from(dotsWrap.children);
+    function go(k){i=Math.max(0,Math.min(n-1,k));track.style.transform='translateX(-'+(i*100)+'vw)';
+      progress.style.width=((i+1)/n*100)+'%';cnum.textContent=String(i+1).padStart(2,'0');
+      dots.forEach(function(d,j){d.setAttribute('aria-current',j===i?'true':'false')})}
+    document.getElementById('next').addEventListener('click',function(){go(i+1)});
+    document.getElementById('prev').addEventListener('click',function(){go(i-1)});
+    window.addEventListener('keydown',function(e){
+      if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();go(i+1)}
+      else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(i-1)}
+      else if(e.key==='Home'){go(0)}else if(e.key==='End'){go(n-1)}});
+    go(0);
+
+    /* hero: a compounding value curve draws on load (value grows; the graph deepens) */
+    var cv=document.getElementById('curve'),cx=cv.getContext('2d');
+    var reduce=window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    var W,H,DPR,t0=null,DUR=1900;
+    function size(){DPR=Math.min(window.devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+      cv.width=W*DPR;cv.height=H*DPR;cx.setTransform(DPR,0,0,DPR,0,0)}
+    function yAt(t){ /* ease-out compounding curve, bottom-left to upper-right */
+      var base=H*0.92; return base-(Math.pow(t,1.9))*(H*0.66)}
+    function frame(ts){if(t0===null)t0=ts;var p=reduce?1:Math.min(1,(ts-t0)/DUR);
+      cx.clearRect(0,0,W,H);
+      // area under curve
+      var grad=cx.createLinearGradient(0,0,0,H);
+      grad.addColorStop(0,'rgba(255,106,69,0.10)');grad.addColorStop(1,'rgba(255,106,69,0)');
+      cx.beginPath();cx.moveTo(0,H);
+      var steps=120,last=p*steps;
+      for(var s=0;s<=last;s++){var t=s/steps;cx.lineTo(t*W,yAt(t))}
+      cx.lineTo((last/steps)*W,H);cx.closePath();cx.fillStyle=grad;cx.fill();
+      // curve line
+      cx.beginPath();cx.lineWidth=2;cx.strokeStyle='rgba(255,106,69,0.85)';
+      for(var s2=0;s2<=last;s2++){var t2=s2/steps;var x=t2*W,y=yAt(t2);s2===0?cx.moveTo(x,y):cx.lineTo(x,y)}
+      cx.stroke();
+      // periwinkle nodes lighting along the curve
+      for(var m=1;m<=6;m++){var tn=m/6;if(p>=tn){cx.fillStyle='rgba(130,167,255,'+(0.5+0.5*Math.min(1,(p-tn)*6))+')';
+        cx.beginPath();cx.arc(tn*W,yAt(tn),3.2,0,6.283);cx.fill()}}
+      if(p<1)requestAnimationFrame(frame)}
+    function start(){size();t0=null;requestAnimationFrame(frame)}
+    start();var rt;window.addEventListener('resize',function(){clearTimeout(rt);rt=setTimeout(start,200)});
+  })();
+</script>

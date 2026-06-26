@@ -10,7 +10,7 @@ from typing import Any
 
 from .models import Asset, Evidence, Relationship, SourceMember, now_iso, stable_id
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class AssetRepository(ABC):
@@ -95,13 +95,26 @@ class SQLiteGraphRepository(AssetRepository, RelationshipRepository, GraphSliceR
         schema = Path(__file__).with_name("schema.sql")
         with self.connect() as conn:
             conn.executescript(schema.read_text(encoding="utf-8"))
+            self._migrate_schema(conn)
             conn.execute(
                 """
                 INSERT OR REPLACE INTO schema_version(version, backend, description, applied_at)
                 VALUES (?, 'sqlite', ?, ?)
                 """,
-                (SCHEMA_VERSION, "baseline sqlite metadata graph schema", now_iso()),
+                (SCHEMA_VERSION, "baseline plus persistent enrichment schema", now_iso()),
             )
+
+    def _migrate_schema(self, conn) -> None:
+        self._add_column_if_missing(conn, "asset", "origin", "TEXT NOT NULL DEFAULT 'baseline'")
+        self._add_column_if_missing(conn, "asset", "enriched_by_member", "TEXT")
+        self._add_column_if_missing(conn, "relationship", "origin", "TEXT NOT NULL DEFAULT 'baseline'")
+        self._add_column_if_missing(conn, "relationship", "enriched_by_member", "TEXT")
+
+    @staticmethod
+    def _add_column_if_missing(conn, table: str, column: str, ddl: str) -> None:
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
     def create_run(
         self,
@@ -132,6 +145,9 @@ class SQLiteGraphRepository(AssetRepository, RelationshipRepository, GraphSliceR
 
     def _clear_run_children(self, conn, run_id: str) -> None:
         for table in (
+            "enrichment_fact_source",
+            "enrichment_member_status",
+            "enrichment_job",
             "source_member",
             "asset",
             "relationship",
@@ -230,8 +246,8 @@ class SQLiteGraphRepository(AssetRepository, RelationshipRepository, GraphSliceR
                 INSERT INTO asset(
                     asset_id, run_id, asset_type, technical_name, display_name, member_id,
                     folder_path, confidence, validation_status, discovery_method,
-                    attributes_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    attributes_json, origin, enriched_by_member, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(asset_id) DO UPDATE SET
                     asset_type = excluded.asset_type,
                     technical_name = excluded.technical_name,
@@ -242,6 +258,8 @@ class SQLiteGraphRepository(AssetRepository, RelationshipRepository, GraphSliceR
                     validation_status = excluded.validation_status,
                     discovery_method = excluded.discovery_method,
                     attributes_json = excluded.attributes_json,
+                    origin = excluded.origin,
+                    enriched_by_member = excluded.enriched_by_member,
                     created_at = excluded.created_at
                 """,
                 (
@@ -256,6 +274,8 @@ class SQLiteGraphRepository(AssetRepository, RelationshipRepository, GraphSliceR
                     asset.validation_status,
                     asset.discovery_method,
                     json.dumps(asset.attributes, sort_keys=True),
+                    asset.origin,
+                    asset.enriched_by_member,
                     asset.created_at,
                 ),
             )
@@ -272,8 +292,8 @@ class SQLiteGraphRepository(AssetRepository, RelationshipRepository, GraphSliceR
                 INSERT INTO relationship(
                     relationship_id, run_id, relationship_type, source_asset_id,
                     target_asset_id, confidence, validation_status, discovery_method,
-                    attributes_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    attributes_json, origin, enriched_by_member, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(relationship_id) DO UPDATE SET
                     relationship_type = excluded.relationship_type,
                     source_asset_id = excluded.source_asset_id,
@@ -282,6 +302,8 @@ class SQLiteGraphRepository(AssetRepository, RelationshipRepository, GraphSliceR
                     validation_status = excluded.validation_status,
                     discovery_method = excluded.discovery_method,
                     attributes_json = excluded.attributes_json,
+                    origin = excluded.origin,
+                    enriched_by_member = excluded.enriched_by_member,
                     created_at = excluded.created_at
                 """,
                 (
@@ -294,6 +316,8 @@ class SQLiteGraphRepository(AssetRepository, RelationshipRepository, GraphSliceR
                     relationship.validation_status,
                     relationship.discovery_method,
                     json.dumps(relationship.attributes, sort_keys=True),
+                    relationship.origin,
+                    relationship.enriched_by_member,
                     relationship.created_at,
                 ),
             )

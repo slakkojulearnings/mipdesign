@@ -770,7 +770,8 @@ class GraphService:
         asset = self.repository.get_asset(asset_id)
         if asset is None:
             raise KeyError(f"asset not found: {asset_id}")
-        tree = asset.get("attributes", {}).get("ast_tree")
+        attrs = asset.get("attributes", {})
+        tree = attrs.get("deep_ast_tree") or attrs.get("ast_tree")
         return {
             "asset": asset,
             "ast_tree": tree

@@ -82,6 +82,10 @@ CONTROL_RELS = {
     "STARTS_TRANSACTION",
     "TRIGGERS",
 }
+DECISION_GRADE_BANNER = (
+    "Structural map only - service interfaces and data ownership are not fully extracted; "
+    "not for cutover/decomposition decisions."
+)
 
 
 class DomainArchitectureService:
@@ -119,6 +123,8 @@ class DomainArchitectureService:
                     "risk_score": service["risk_score"],
                     "confidence": service["confidence"],
                     "validation_status": service["validation_status"],
+                    "decision_grade": service.get("decision_grade", False),
+                    "decision_grade_banner": service.get("decision_grade_banner", DECISION_GRADE_BANNER),
                     "steps": [
                         {
                             "kind": "stabilize_facts",
@@ -182,6 +188,11 @@ class DomainArchitectureService:
         event_candidates = self._event_candidates(relationships, member_asset_ids)
         dependencies = self._external_dependencies(relationships, member_asset_ids)
         citations = self._citations(cluster, sample_assets, relationships)
+        decision_gates = self._decision_gates(relationships)
+        decision_grade = all(decision_gates.values())
+        if not decision_grade:
+            confidence = min(confidence, 0.74)
+            validation_status = "needs_review"
 
         return {
             "context_id": cluster.get("cluster_id") or stable_id(run_id, "context", capability),
@@ -200,6 +211,9 @@ class DomainArchitectureService:
             "risk_score": round(float(cluster.get("risk_score") or attrs.get("risk_score") or 0.0), 3),
             "confidence": confidence,
             "validation_status": validation_status,
+            "decision_grade": decision_grade,
+            "decision_grade_banner": "" if decision_grade else DECISION_GRADE_BANNER,
+            "decision_gates": decision_gates,
             "aggregate_candidates": aggregate_candidates,
             "api_candidates": api_candidates,
             "event_candidates": event_candidates,
@@ -227,6 +241,9 @@ class DomainArchitectureService:
             "risk_score": context["risk_score"],
             "confidence": context["confidence"],
             "validation_status": context["validation_status"],
+            "decision_grade": context.get("decision_grade", False),
+            "decision_grade_banner": context.get("decision_grade_banner", DECISION_GRADE_BANNER),
+            "decision_gates": context.get("decision_gates", {}),
             "api_candidates": context["api_candidates"],
             "data_contracts": context["aggregate_candidates"][:12],
             "event_candidates": context["event_candidates"],
@@ -265,6 +282,34 @@ class DomainArchitectureService:
                 (run_id, *asset_ids, *asset_ids),
             ).fetchall()
             return [self.repository._relationship_row(row) for row in rows]
+
+    @staticmethod
+    def _decision_gates(relationships: list[dict[str, Any]]) -> dict[str, bool]:
+        interface_contracts = any(
+            rel.get("relationship_type") == "CALLS" and (rel.get("attributes") or {}).get("using")
+            for rel in relationships
+        )
+        commarea_contracts = any(
+            rel.get("relationship_type") in {"USES_CICS_CONTRACT", "CICS_CONTRACT_USES_FIELD", "CONTRACT_USES_FIELD"}
+            or rel.get("target_type") == "CICS_CONTRACT"
+            for rel in relationships
+        )
+        dataset_identity = any(
+            rel.get("relationship_type")
+            in {"BINDS_DATASET", "USES_DATASET", "READS_DATASET", "WRITES_DATASET", "HAS_RECORD_LAYOUT"}
+            for rel in relationships
+        )
+        bounded_copybook_layout = any(
+            rel.get("relationship_type") in {"HAS_COPY_SITE", "FIELD_OVERRIDE", "DECLARES_FIELD"}
+            and (rel.get("attributes") or {}).get("bounded_copybook_layout")
+            for rel in relationships
+        )
+        return {
+            "interface_contracts_present": interface_contracts,
+            "commarea_contracts_present": commarea_contracts,
+            "dataset_identity_normalized": dataset_identity,
+            "bounded_copybook_layout": bounded_copybook_layout,
+        }
 
     def _aggregate_candidates(
         self, relationships: list[dict[str, Any]], member_asset_ids: set[str]

@@ -948,8 +948,8 @@ def _upsert_asset(
         INSERT INTO asset(
             asset_id, run_id, asset_type, technical_name, display_name, member_id,
             folder_path, confidence, validation_status, discovery_method,
-            attributes_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            attributes_json, origin, enriched_by_member, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(asset_id) DO UPDATE SET
             asset_type = excluded.asset_type,
             technical_name = excluded.technical_name,
@@ -960,6 +960,8 @@ def _upsert_asset(
             validation_status = excluded.validation_status,
             discovery_method = excluded.discovery_method,
             attributes_json = excluded.attributes_json,
+            origin = excluded.origin,
+            enriched_by_member = excluded.enriched_by_member,
             created_at = excluded.created_at
         """,
         (
@@ -974,6 +976,8 @@ def _upsert_asset(
             asset.validation_status,
             asset.discovery_method,
             json.dumps(asset.attributes, sort_keys=True),
+            asset.origin,
+            asset.enriched_by_member,
             asset.created_at,
         ),
     )
@@ -992,8 +996,8 @@ def _insert_relationship(
         INSERT INTO relationship(
             relationship_id, run_id, relationship_type, source_asset_id,
             target_asset_id, confidence, validation_status, discovery_method,
-            attributes_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            attributes_json, origin, enriched_by_member, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(relationship_id) DO UPDATE SET
             relationship_type = excluded.relationship_type,
             source_asset_id = excluded.source_asset_id,
@@ -1002,6 +1006,8 @@ def _insert_relationship(
             validation_status = excluded.validation_status,
             discovery_method = excluded.discovery_method,
             attributes_json = excluded.attributes_json,
+            origin = excluded.origin,
+            enriched_by_member = excluded.enriched_by_member,
             created_at = excluded.created_at
         """,
         (
@@ -1014,6 +1020,8 @@ def _insert_relationship(
             relationship.validation_status,
             relationship.discovery_method,
             json.dumps(relationship.attributes, sort_keys=True),
+            relationship.origin,
+            relationship.enriched_by_member,
             relationship.created_at,
         ),
     )

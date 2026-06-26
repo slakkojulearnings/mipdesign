@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS asset (
     validation_status TEXT NOT NULL,
     discovery_method TEXT NOT NULL,
     attributes_json TEXT NOT NULL DEFAULT '{}',
+    origin TEXT NOT NULL DEFAULT 'baseline',
+    enriched_by_member TEXT,
     created_at TEXT NOT NULL,
     UNIQUE(run_id, asset_type, technical_name)
 );
@@ -67,6 +69,8 @@ CREATE TABLE IF NOT EXISTS relationship (
     validation_status TEXT NOT NULL,
     discovery_method TEXT NOT NULL,
     attributes_json TEXT NOT NULL DEFAULT '{}',
+    origin TEXT NOT NULL DEFAULT 'baseline',
+    enriched_by_member TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -140,6 +144,63 @@ CREATE TABLE IF NOT EXISTS parser_result_cache (
     resolver_fingerprint TEXT NOT NULL,
     parser_version TEXT NOT NULL,
     payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS enrichment_artifact_cache (
+    artifact_id TEXT PRIMARY KEY,
+    source_sha256 TEXT NOT NULL,
+    parser_version TEXT NOT NULL,
+    grammar_dialect TEXT NOT NULL DEFAULT 'ibm-enterprise-cobol',
+    resolver_fingerprint TEXT NOT NULL,
+    parse_status TEXT NOT NULL,
+    ast_json TEXT,
+    payload_json TEXT,
+    diagnostics_json TEXT NOT NULL DEFAULT '{}',
+    fact_count INTEGER NOT NULL DEFAULT 0,
+    parser_confidence REAL NOT NULL DEFAULT 0,
+    elapsed_ms REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    UNIQUE(source_sha256, parser_version, grammar_dialect, resolver_fingerprint)
+);
+
+CREATE TABLE IF NOT EXISTS enrichment_member_status (
+    run_id TEXT NOT NULL REFERENCES run_manifest(run_id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES source_member(member_id) ON DELETE CASCADE,
+    source_sha256 TEXT NOT NULL,
+    artifact_id TEXT REFERENCES enrichment_artifact_cache(artifact_id) ON DELETE SET NULL,
+    state TEXT NOT NULL,
+    priority INTEGER NOT NULL DEFAULT 0,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    materialized_at TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(run_id, member_id)
+);
+
+CREATE TABLE IF NOT EXISTS enrichment_job (
+    job_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES run_manifest(run_id) ON DELETE CASCADE,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    status TEXT NOT NULL,
+    selected_count INTEGER NOT NULL DEFAULT 0,
+    enriched_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0,
+    skipped_count INTEGER NOT NULL DEFAULT 0,
+    config_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS enrichment_fact_source (
+    fact_source_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES run_manifest(run_id) ON DELETE CASCADE,
+    entity_kind TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    origin TEXT NOT NULL,
+    source_member_id TEXT NOT NULL,
+    evidence_id TEXT,
+    parser_tier TEXT NOT NULL,
+    confidence REAL NOT NULL,
     created_at TEXT NOT NULL
 );
 
@@ -274,16 +335,23 @@ CREATE INDEX IF NOT EXISTS idx_member_run_status ON source_member(run_id, valida
 CREATE INDEX IF NOT EXISTS idx_asset_run_type_name ON asset(run_id, asset_type, technical_name);
 CREATE INDEX IF NOT EXISTS idx_asset_run_folder ON asset(run_id, folder_path);
 CREATE INDEX IF NOT EXISTS idx_asset_run_status ON asset(run_id, validation_status);
+CREATE INDEX IF NOT EXISTS idx_asset_run_origin ON asset(run_id, origin);
 CREATE INDEX IF NOT EXISTS idx_relationship_run_source ON relationship(run_id, source_asset_id);
 CREATE INDEX IF NOT EXISTS idx_relationship_run_target ON relationship(run_id, target_asset_id);
 CREATE INDEX IF NOT EXISTS idx_relationship_run_type ON relationship(run_id, relationship_type);
 CREATE INDEX IF NOT EXISTS idx_relationship_run_status ON relationship(run_id, validation_status);
 CREATE INDEX IF NOT EXISTS idx_relationship_run_confidence ON relationship(run_id, confidence);
+CREATE INDEX IF NOT EXISTS idx_relationship_run_origin ON relationship(run_id, origin);
 CREATE INDEX IF NOT EXISTS idx_evidence_entity ON evidence(run_id, entity_kind, entity_id);
 CREATE INDEX IF NOT EXISTS idx_root_summary_risk ON root_summary(run_id, risk_score DESC);
 CREATE INDEX IF NOT EXISTS idx_cluster_run_risk ON app_cluster(run_id, risk_score DESC);
 CREATE INDEX IF NOT EXISTS idx_insight_run_type ON insight(run_id, insight_type);
 CREATE INDEX IF NOT EXISTS idx_parser_cache_source ON parser_result_cache(source_sha256, resolver_fingerprint);
+CREATE INDEX IF NOT EXISTS idx_enrich_artifact_sha ON enrichment_artifact_cache(source_sha256);
+CREATE INDEX IF NOT EXISTS idx_enrich_member_state ON enrichment_member_status(run_id, state, priority DESC);
+CREATE INDEX IF NOT EXISTS idx_enrich_member_sha ON enrichment_member_status(run_id, source_sha256);
+CREATE INDEX IF NOT EXISTS idx_enrich_job_run ON enrichment_job(run_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_fact_source_entity ON enrichment_fact_source(run_id, entity_kind, entity_id);
 CREATE INDEX IF NOT EXISTS idx_scan_progress_run ON scan_progress(run_id, phase);
 CREATE INDEX IF NOT EXISTS idx_scan_issue_run_stage ON scan_issue(run_id, stage, severity);
 CREATE INDEX IF NOT EXISTS idx_phase_telemetry_run ON scan_phase_telemetry(run_id, phase);

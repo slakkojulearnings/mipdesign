@@ -6,7 +6,8 @@ from typing import Any, Callable
 from .cobol_antlr import cobol_ast
 
 
-PARSER_VERSION = "cobol-antlr4-proleap-4.13.2+mip-adapter-v2"
+PARSER_VERSION = "mip-cobol-baseline-v3"
+DEEP_PARSER_VERSION = "cobol-antlr4-proleap-4.13.2+mip-adapter-v3"
 
 
 class CopybookResolver:
@@ -80,13 +81,32 @@ def copybook_resolver(
 
 
 def parse_cobol(text: str, resolver: Callable[[str], str | None] | None = None) -> dict[str, Any]:
-    """Return a canonical parser payload using the vendored parser package.
+    """Return the fast baseline payload used by synchronous estate scans."""
+    antlr_adapter, cobol_ast, cobol_antlr = _load_local_modules()
+    if cobol_ast is None:
+        return _fallback_parse(text)
 
-    When `antlr4-python3-runtime` is installed, the generated COBOL-85 grammar is used.
-    If the runtime is missing or a source member falls outside grammar coverage, the
-    local COPY/REPLACING preprocessor plus local AST parser still recovers evidence and
-    records the degraded parser mode in the payload.
-    """
+    raw_unit = cobol_ast.parse(text)
+    expanded_text = text
+    parser_backend_info = {
+        "requested": "baseline-cobol_ast",
+        "source": "mip_intel.cobol_antlr",
+        "version": PARSER_VERSION,
+        "antlr4_available": bool(cobol_antlr and cobol_antlr.available()),
+        "effective": "local-cobol_ast",
+    }
+    if antlr_adapter is not None:
+        try:
+            expanded_text = antlr_adapter.preprocess(text, resolver=resolver)
+            parser_backend_info["effective"] = "local-copy-replacing-preprocessor+cobol_ast"
+        except Exception as exc:
+            parser_backend_info["preprocess_error"] = type(exc).__name__
+    expanded_unit = cobol_ast.parse(expanded_text)
+    return _unit_payload(raw_unit, expanded_unit, text, expanded_text, parser_backend_info, resolver)
+
+
+def parse_cobol_deep(text: str, resolver: Callable[[str], str | None] | None = None) -> dict[str, Any]:
+    """Return an ANTLR-enriched payload for explicit enrichment jobs only."""
     antlr_adapter, cobol_ast, cobol_antlr = _load_local_modules()
     if cobol_ast is None:
         return _fallback_parse(text)
@@ -96,22 +116,24 @@ def parse_cobol(text: str, resolver: Callable[[str], str | None] | None = None) 
     parser_backend_info = {
         "requested": "local-antlr4",
         "source": "mip_intel.cobol_antlr",
-        "version": PARSER_VERSION,
+        "version": DEEP_PARSER_VERSION,
+        "baseline_version": PARSER_VERSION,
         "antlr4_available": bool(cobol_antlr and cobol_antlr.available()),
-        "effective": "local-cobol_ast",
+        "effective": "antlr4-unavailable",
     }
-    if cobol_antlr is not None and cobol_antlr.available():
+    if antlr_adapter is not None:
         try:
             expanded_text = antlr_adapter.preprocess(text, resolver=resolver)
-            # Reuse the preprocessed text so cobol_antlr does not preprocess a second time.
+        except Exception as exc:
+            parser_backend_info["preprocess_error"] = type(exc).__name__
+    if cobol_antlr is not None and cobol_antlr.available():
+        try:
             expanded_unit = cobol_antlr.parse(text, resolver=resolver, pre=expanded_text)
             parser_backend_info["effective"] = "local-antlr4-full-grammar"
             return _unit_payload(raw_unit, expanded_unit, text, expanded_text, parser_backend_info, resolver)
         except Exception as exc:
             parser_backend_info["antlr4_error"] = type(exc).__name__
-    if antlr_adapter is not None:
-        expanded_text = antlr_adapter.preprocess(text, resolver=resolver)
-        parser_backend_info["effective"] = "local-copy-replacing-preprocessor+cobol_ast"
+            parser_backend_info["effective"] = "antlr4-failed+cobol_ast"
     expanded_unit = cobol_ast.parse(expanded_text)
     return _unit_payload(raw_unit, expanded_unit, text, expanded_text, parser_backend_info, resolver)
 
@@ -209,7 +231,7 @@ def _unit_payload(
         "field_flows": list(expanded_unit.field_flows),
         "counts": dict(expanded_unit.counts or raw_unit.counts),
         "complexity": int(expanded_unit.complexity or raw_unit.complexity or 1),
-        "expanded": expanded_text != "",
+        "expanded": expanded_text != raw_text,
         "copy_replacing": _copy_replacing(raw_text),
         "copy_resolution": copy_resolution,
         "dialect_profile": _dialect_profile(raw_text),
@@ -229,6 +251,10 @@ def _parser_confidence(parser: dict[str, Any], copy_resolution: list[dict[str, A
     confidence = 0.95 if effective == "local-antlr4-full-grammar" else 0.78
     if parser.get("antlr4_error"):
         confidence = min(confidence, 0.68)
+    if parser.get("preprocess_error"):
+        confidence = min(confidence, 0.65)
+    if effective == "antlr4-unavailable":
+        confidence = min(confidence, 0.45)
     if effective == "fallback-regex":
         confidence = min(confidence, 0.45)
     if any(not row.get("resolved") for row in copy_resolution):

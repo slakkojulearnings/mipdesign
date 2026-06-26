@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 from .demo_seed import seed_demo
 from .domain_architecture import DomainArchitectureService
+from .enrichment import EnrichmentService
 from .graph_service import GraphService
 from .models import GraphSliceRequest
 from .repositories import SQLiteGraphRepository
@@ -24,6 +25,7 @@ class IntelligenceApi:
         self.repository.initialize()
         self.graph = GraphService(self.repository)
         self.domain_architecture = DomainArchitectureService(self.repository)
+        self.enrichment = EnrichmentService(self.repository)
 
     def init_demo(self) -> dict[str, Any]:
         run_id = seed_demo(self.repository.db_path)
@@ -68,6 +70,7 @@ class IntelligenceApi:
     def validate(self, run_id: str | None = None) -> dict[str, Any]:
         selected = self.current_run(run_id)
         stats = self.stats(selected)
+        enrichment_coverage = self.enrichment.coverage(selected)
         with self.repository.connect() as conn:
             row = conn.execute(
                 """
@@ -173,7 +176,39 @@ class IntelligenceApi:
             "status": "failed" if failed else "passed",
             "checks": checks,
             "stats": stats,
+            "enrichment_coverage": enrichment_coverage,
         }
+
+    def enrich(
+        self,
+        run_id: str | None = None,
+        *,
+        top_n: int = 5000,
+        timeout: float = 20.0,
+        max_workers: int = 1,
+        priority: str = "roots",
+        changed_only: bool = False,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        selected = self.current_run(run_id)
+        return self.enrichment.enrich(
+            selected,
+            top_n=top_n,
+            timeout=timeout,
+            max_workers=max_workers,
+            priority=priority,
+            changed_only=changed_only,
+            force=force,
+        )
+
+    def enrichment_coverage(self, run_id: str | None = None) -> dict[str, Any]:
+        selected = self.current_run(run_id)
+        return {"run_id": selected, "coverage": self.enrichment.coverage(selected)}
+
+    def parse_status(self, asset: str, run_id: str | None = None) -> dict[str, Any]:
+        selected = self.current_run(run_id)
+        asset_id = self.resolve_asset_id(selected, asset)
+        return {"run_id": selected, "parser_status": self.enrichment.status_for_asset(selected, asset_id)}
 
     def performance(self, run_id: str | None = None, *, limit: int = 25) -> dict[str, Any]:
         selected = self.current_run(run_id)
@@ -421,8 +456,9 @@ class IntelligenceApi:
 
     def coverage(self, asset: str, run_id: str | None = None) -> dict[str, Any]:
         profile = self.node(asset, run_id)
+        selected = self.current_run(run_id)
         return {
-            "run_id": self.current_run(run_id),
+            "run_id": selected,
             "asset": {
                 "asset_id": profile["asset"]["asset_id"],
                 "technical_name": profile["asset"]["technical_name"],
@@ -431,6 +467,7 @@ class IntelligenceApi:
                 "validation_status": profile["asset"]["validation_status"],
             },
             "coverage_report": profile["coverage_report"],
+            "parser_status": self.enrichment.status_for_asset(selected, profile["asset"]["asset_id"]),
         }
 
     def edge(self, relationship_id: str, run_id: str | None = None) -> dict[str, Any]:
@@ -837,6 +874,37 @@ def create_fastapi_app(db_path: str | Path = "data/mip-intel.db"):
     @app.get("/validate")
     def validate(run_id: str | None = None) -> dict[str, Any]:
         return api.validate(run_id)
+
+    @app.post("/enrich")
+    def enrich(
+        run_id: str | None = None,
+        top_n: int = Query(default=5000, ge=1, le=100000),
+        timeout: float = Query(default=20.0, ge=0.0, le=600.0),
+        max_workers: int = Query(default=1, ge=1, le=16),
+        priority: str = "roots",
+        changed_only: bool = False,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        return api.enrich(
+            run_id,
+            top_n=top_n,
+            timeout=timeout,
+            max_workers=max_workers,
+            priority=priority,
+            changed_only=changed_only,
+            force=force,
+        )
+
+    @app.get("/enrichment/coverage")
+    def enrichment_coverage(run_id: str | None = None) -> dict[str, Any]:
+        return api.enrichment_coverage(run_id)
+
+    @app.get("/parser/status/{asset}")
+    def parse_status(asset: str, run_id: str | None = None):
+        try:
+            return api.parse_status(asset, run_id)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
 
     @app.get("/performance")
     def performance(run_id: str | None = None, limit: int = Query(default=25, ge=1, le=200)):

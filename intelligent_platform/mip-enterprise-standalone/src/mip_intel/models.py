@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from hashlib import sha1
@@ -13,6 +14,17 @@ def now_iso() -> str:
 def stable_id(*parts: object) -> str:
     value = "|".join(str(part) for part in parts)
     return sha1(value.encode("utf-8")).hexdigest()[:16]
+
+
+_RELATIONSHIP_DISCRIMINATORS: dict[str, tuple[str, ...]] = {
+    "FLOWS_TO": ("flow_kind", "line", "source_field", "target_field"),
+    "HOST_VARIABLE_BINDS_COLUMN": ("host_variable", "column", "statement_type", "line"),
+    "EXPANDS_TO_STEP": ("proc_name", "step_name", "expanded_step_name"),
+}
+
+
+def _stable_json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, default=str)
 
 
 @dataclass(frozen=True)
@@ -61,6 +73,8 @@ class Asset:
     validation_status: str = "confirmed"
     discovery_method: str = "observed"
     attributes: dict[str, Any] = field(default_factory=dict)
+    origin: str = "baseline"
+    enriched_by_member: str | None = None
     created_at: str = field(default_factory=now_iso)
 
     @property
@@ -78,6 +92,8 @@ class Relationship:
     validation_status: str = "confirmed"
     discovery_method: str = "observed"
     attributes: dict[str, Any] = field(default_factory=dict)
+    origin: str = "baseline"
+    enriched_by_member: str | None = None
     created_at: str = field(default_factory=now_iso)
 
     @property
@@ -85,11 +101,26 @@ class Relationship:
         return stable_id(
             self.run_id,
             "relationship",
-            self.relationship_type,
+            self.relationship_type.upper(),
             self.source_asset_id,
             self.target_asset_id,
-            self.attributes,
+            self._discriminator(),
         )
+
+    def _discriminator(self) -> str:
+        keys = _RELATIONSHIP_DISCRIMINATORS.get(self.relationship_type.upper(), ())
+        if not keys:
+            return ""
+        parts = []
+        for key in keys:
+            value = self.attributes.get(key)
+            if value not in (None, "", [], {}):
+                parts.append(f"{key}={_stable_json(value)}")
+        return "|".join(parts)
+
+    @property
+    def fact_hash(self) -> str:
+        return stable_id("relationship_fact", _stable_json(self.attributes))
 
 
 @dataclass(frozen=True)

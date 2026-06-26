@@ -80,7 +80,7 @@ class ProductionParserHardeningTests(unittest.TestCase):
                 ("second", "CARDADV"),
             )[0]["attributes_json"]
         )
-        self.assertEqual(attrs["parser"]["effective"], "local-antlr4-full-grammar")
+        self.assertEqual(attrs["parser"]["effective"], "local-copy-replacing-preprocessor+cobol_ast")
         self.assertTrue(attrs["parser"]["cache_hit"])
         self.assertTrue(attrs["copy_resolution"][0]["resolved"])
         self.assertEqual(attrs["copy_resolution"][0]["source_path"], "shared/CALLBOOK")
