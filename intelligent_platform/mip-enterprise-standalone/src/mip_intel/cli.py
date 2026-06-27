@@ -57,6 +57,19 @@ def build_parser() -> argparse.ArgumentParser:
     enrichment_coverage = sub.add_parser("enrichment-coverage", help="Show estate-level deep enrichment coverage")
     add_run_id(enrichment_coverage)
 
+    import_runtime = sub.add_parser("import-runtime", help="Import observed runtime calls from JSON or CSV")
+    add_run_id(import_runtime)
+    import_runtime.add_argument("path", help="JSON/CSV with source_program,target_program,count,environment,job,transaction")
+    import_runtime.add_argument("--source-system", default="runtime", help="Source label, such as SMF, CICS, APM, or runtime")
+
+    import_catalog = sub.add_parser("import-catalog", help="Import dataset catalog metadata from JSON or CSV")
+    add_run_id(import_catalog)
+    import_catalog.add_argument("path", help="JSON/CSV with raw_dataset,canonical_dataset,type,owner,application")
+    import_catalog.add_argument("--catalog-source", default="catalog", help="Source label, such as IDCAMS, CMDB, or catalog")
+
+    external_evidence = sub.add_parser("external-evidence", help="Show imported runtime/catalog evidence summary")
+    add_run_id(external_evidence)
+
     performance = sub.add_parser("performance", help="Show scan telemetry and slow file report")
     add_run_id(performance)
     performance.add_argument("--limit", type=int, default=25)
@@ -293,6 +306,12 @@ def main(argv: list[str] | None = None) -> int:
         print_json(api.parse_status(args.asset, args.run_id))
     elif args.command == "enrichment-coverage":
         print_json(api.enrichment_coverage(args.run_id))
+    elif args.command == "import-runtime":
+        print_json(api.import_runtime(args.path, args.run_id, source_system=args.source_system))
+    elif args.command == "import-catalog":
+        print_json(api.import_catalog(args.path, args.run_id, catalog_source=args.catalog_source))
+    elif args.command == "external-evidence":
+        print_json(api.external_evidence_summary(args.run_id))
     elif args.command == "performance":
         print_json(api.performance(args.run_id, limit=args.limit))
     elif args.command == "corrections":

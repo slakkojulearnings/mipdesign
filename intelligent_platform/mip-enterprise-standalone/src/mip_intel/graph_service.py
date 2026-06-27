@@ -11,6 +11,7 @@ from .repositories import SQLiteGraphRepository
 CONTROL_RELS = {
     "CALLS",
     "DYNAMIC_CALL",
+    "OBSERVED_CALLS",
     "EXECUTES",
     "INVOKES_PROC",
     "STARTS_PROGRAM",
@@ -90,6 +91,8 @@ DATA_RELS = {
     "WRITES_DATASET",
     "DECLARES_DD",
     "BINDS_DATASET",
+    "CATALOG_DESCRIBES_DATASET",
+    "CATALOG_ALIASES_DATASET",
     "USES_QUEUE",
     "USES_MAP",
     "DEFINES_FILE",
@@ -99,6 +102,7 @@ RISKY_STATUSES = {"needs_review", "inferred"}
 CALL_GRAPH_RELS = {
     "CALLS",
     "DYNAMIC_CALL",
+    "OBSERVED_CALLS",
     "EXECUTES",
     "INVOKES_PROC",
     "STARTS_PROGRAM",
@@ -308,6 +312,10 @@ class GraphService:
         unresolved = [rel for rel in all_rels if rel.get("validation_status") in RISKY_STATUSES]
         dynamic_calls = [rel for rel in outgoing if rel.get("relationship_type") == "DYNAMIC_CALL"]
         call_edges = [rel for rel in outgoing if rel.get("relationship_type") == "CALLS"]
+        runtime_call_edges = [
+            rel for rel in coverage_rels
+            if rel.get("relationship_type") == "OBSERVED_CALLS"
+        ]
         calls_with_using = [rel for rel in call_edges if (rel.get("attributes") or {}).get("using")]
         control_edges = [
             rel for rel in coverage_rels
@@ -321,7 +329,15 @@ class GraphService:
         copybook_field_edges = [
             rel for rel in coverage_rels
             if rel.get("relationship_type")
-            in {"DECLARES_COPYBOOK_FIELD", "FIELD_DERIVED_FROM_COPYBOOK", "USES_COPYBOOK_FIELD"}
+            in {
+                "DECLARES_COPYBOOK_FIELD",
+                "FIELD_DERIVED_FROM_COPYBOOK",
+                "USES_COPYBOOK_FIELD",
+                "HAS_COPY_SITE",
+                "COPY_SITE_EXPANDS_COPYBOOK",
+                "COPY_SITE_DECLARES_FIELD",
+                "MATERIALIZES_COPYBOOK_FIELD",
+            }
         ]
         sql_edges = [
             rel for rel in outgoing
@@ -420,7 +436,14 @@ class GraphService:
         cics_edges = [
             rel for rel in coverage_rels
             if str((rel.get("attributes") or {}).get("cics_kind") or "").lower() == "cics"
-            or rel.get("relationship_type") in {"DEFINES_CICS_CONTRACT", "HANDLES_CICS_CONDITION", "CONTRACT_USES_FIELD"}
+            or rel.get("relationship_type")
+            in {
+                "DEFINES_CICS_CONTRACT",
+                "DEFINES_COMMAREA_CONTRACT",
+                "HANDLES_CICS_CONDITION",
+                "CONTRACT_USES_FIELD",
+                "COMMAREA_CONTAINS_FIELD",
+            }
         ]
         dclgen_edges = [
             rel for rel in coverage_rels
@@ -455,6 +478,54 @@ class GraphService:
             or rel.get("source_type") == "SORT_MERGE_OPERATION"
             or rel.get("target_type") == "SORT_MERGE_OPERATION"
         ]
+        interface_contract_edges = [
+            rel for rel in coverage_rels
+            if rel.get("relationship_type")
+            in {
+                "DECLARES_ENTRY_CONTRACT",
+                "ENTRY_CONTRACT_USES_FIELD",
+                "DEFINES_CALL_CONTRACT",
+                "CALL_CONTRACT_TARGETS",
+                "CALL_PASSES_FIELD",
+                "CALL_ARGUMENT_MAPS_TO_LINKAGE",
+                "CONTRACT_USES_FIELD",
+            }
+            or rel.get("source_type") == "INTERFACE_CONTRACT"
+            or rel.get("target_type") == "INTERFACE_CONTRACT"
+        ]
+        commarea_contract_edges = [
+            rel for rel in coverage_rels
+            if rel.get("relationship_type") in {"DEFINES_COMMAREA_CONTRACT", "COMMAREA_CONTAINS_FIELD"}
+            or (
+                rel.get("relationship_type") == "CONTRACT_USES_FIELD"
+                and (rel.get("attributes") or {}).get("contract_role") == "commarea"
+            )
+        ]
+        dataset_identity_edges = [
+            rel for rel in coverage_rels
+            if rel.get("relationship_type")
+            in {
+                "NORMALIZES_TO_DATASET_IDENTITY",
+                "READS_DATASET_IDENTITY",
+                "WRITES_DATASET_IDENTITY",
+                "USES_DATASET_IDENTITY",
+                "BINDS_DATASET_IDENTITY",
+                "CATALOG_DESCRIBES_DATASET",
+                "CATALOG_ALIASES_DATASET",
+            }
+            or rel.get("target_type") == "DATASET_IDENTITY"
+            or rel.get("source_type") == "DATASET_IDENTITY"
+        ]
+        catalog_reconciliation_edges = [
+            rel for rel in coverage_rels
+            if rel.get("relationship_type") in {"CATALOG_DESCRIBES_DATASET", "CATALOG_ALIASES_DATASET"}
+        ]
+        bounded_copybook_edges = [
+            rel for rel in copybook_field_edges
+            if (rel.get("attributes") or {}).get("bounded_copybook_layout")
+            or rel.get("source_type") == "COPY_SITE"
+            or rel.get("target_type") == "COPY_SITE"
+        ]
         unresolved_copies = [row for row in copy_resolution if not row.get("resolved", True)]
         parser_status = (
             "not_observed"
@@ -480,8 +551,19 @@ class GraphService:
             ),
             _coverage_check(
                 "call_contracts",
-                "captured" if calls_with_using else "partial" if call_edges else "not_observed",
-                {"calls": len(call_edges), "calls_with_using": len(calls_with_using), "dynamic_calls": len(dynamic_calls)},
+                "captured" if calls_with_using or interface_contract_edges else "partial" if call_edges or dynamic_calls or runtime_call_edges else "not_observed",
+                {
+                    "calls": len(call_edges),
+                    "calls_with_using": len(calls_with_using),
+                    "dynamic_calls": len(dynamic_calls),
+                    "runtime_observed_calls": len(runtime_call_edges),
+                    "interface_contract_edges": len(interface_contract_edges),
+                },
+            ),
+            _coverage_check(
+                "runtime_observations",
+                "captured" if runtime_call_edges else "not_observed",
+                {"runtime_observed_calls": len(runtime_call_edges)},
             ),
             _coverage_check(
                 "data_dictionary",
@@ -539,6 +621,11 @@ class GraphService:
                 {"copybook_field_edges": len(copybook_field_edges)},
             ),
             _coverage_check(
+                "bounded_copybook_layout",
+                "captured" if bounded_copybook_edges else "not_observed",
+                {"bounded_copybook_edges": len(bounded_copybook_edges)},
+            ),
+            _coverage_check(
                 "pli",
                 "captured" if pli_edges else "not_observed",
                 {"pli_edges": len(pli_edges)},
@@ -557,6 +644,26 @@ class GraphService:
                 "cics_contracts",
                 "captured" if any(rel.get("relationship_type") in {"DEFINES_CICS_CONTRACT", "CONTRACT_USES_FIELD"} for rel in cics_edges) else "not_observed",
                 {"cics_contract_edges": len(cics_edges)},
+            ),
+            _coverage_check(
+                "commarea_contracts",
+                "captured" if commarea_contract_edges else "not_observed",
+                {"commarea_contract_edges": len(commarea_contract_edges)},
+            ),
+            _coverage_check(
+                "interface_contract_model",
+                "captured" if interface_contract_edges else "not_observed",
+                {"interface_contract_edges": len(interface_contract_edges)},
+            ),
+            _coverage_check(
+                "dataset_identity",
+                "captured" if dataset_identity_edges else "not_observed",
+                {"dataset_identity_edges": len(dataset_identity_edges)},
+            ),
+            _coverage_check(
+                "catalog_reconciliation",
+                "captured" if catalog_reconciliation_edges else "not_observed",
+                {"catalog_reconciliation_edges": len(catalog_reconciliation_edges)},
             ),
             _coverage_check(
                 "business_rules",
@@ -1116,7 +1223,7 @@ class GraphService:
                         SELECT target_asset_id AS asset_id, COUNT(*) AS caller_count
                         FROM relationship
                         WHERE run_id = ?
-                          AND relationship_type IN ('CALLS', 'DYNAMIC_CALL')
+                          AND relationship_type IN ('CALLS', 'DYNAMIC_CALL', 'OBSERVED_CALLS')
                           AND validation_status = 'confirmed'
                         GROUP BY target_asset_id
                     ) callers ON callers.asset_id = a.asset_id
@@ -1146,7 +1253,7 @@ class GraphService:
         data = [
             node
             for node in nodes
-            if node["type"] in {"TABLE", "FILE", "DATASET", "COPYBOOK", "MQ_QUEUE", "MAP"}
+            if node["type"] in {"TABLE", "FILE", "DATASET", "DATASET_IDENTITY", "COPYBOOK", "MQ_QUEUE", "MAP"}
         ]
         unresolved = [edge for edge in edges if edge["validation_status"] in RISKY_STATUSES]
         root = self.repository.get_asset(root_asset_id) or {}

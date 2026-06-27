@@ -26,8 +26,8 @@ class Phase5ProductionReadinessTests(unittest.TestCase):
             repo.initialize()
 
             with closing(sqlite3.connect(db)) as conn:
-                row = conn.execute("SELECT version, backend FROM schema_version").fetchone()
-            self.assertEqual(row, (2, "sqlite"))
+                row = conn.execute("SELECT version, backend FROM schema_version ORDER BY version DESC LIMIT 1").fetchone()
+            self.assertEqual(row, (3, "sqlite"))
 
             with self.assertRaises(NotImplementedError):
                 create_repository(StorageConfig(backend="postgresql", dsn="postgresql://example"))

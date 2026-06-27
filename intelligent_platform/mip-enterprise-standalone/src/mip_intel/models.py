@@ -20,6 +20,20 @@ _RELATIONSHIP_DISCRIMINATORS: dict[str, tuple[str, ...]] = {
     "FLOWS_TO": ("flow_kind", "line", "source_field", "target_field"),
     "HOST_VARIABLE_BINDS_COLUMN": ("host_variable", "column", "statement_type", "line"),
     "EXPANDS_TO_STEP": ("proc_name", "step_name", "expanded_step_name"),
+    "CALL_PASSES_FIELD": ("line", "argument_position", "argument_name"),
+    "CALL_ARGUMENT_MAPS_TO_LINKAGE": ("call_line", "argument_position", "caller_field", "callee_field"),
+    "CONTRACT_USES_FIELD": ("contract_role", "line", "argument_position", "field"),
+    "ENTRY_CONTRACT_USES_FIELD": ("argument_position", "field"),
+    "COPY_SITE_DECLARES_FIELD": ("copy_site", "materialized_field", "original_field"),
+    "MATERIALIZES_COPYBOOK_FIELD": ("copy_site", "materialized_field", "copybook_field"),
+    "NORMALIZES_TO_DATASET_IDENTITY": ("raw_dataset", "canonical_dataset"),
+    "READS_DATASET_IDENTITY": ("raw_dataset", "canonical_dataset", "dd_name"),
+    "WRITES_DATASET_IDENTITY": ("raw_dataset", "canonical_dataset", "dd_name"),
+    "USES_DATASET_IDENTITY": ("raw_dataset", "canonical_dataset", "dd_name"),
+    "BINDS_DATASET_IDENTITY": ("raw_dataset", "canonical_dataset", "dd_name"),
+    "OBSERVED_CALLS": ("observation_source", "environment", "job", "transaction"),
+    "CATALOG_DESCRIBES_DATASET": ("catalog_source", "catalog_dataset"),
+    "CATALOG_ALIASES_DATASET": ("catalog_source", "alias", "canonical_dataset"),
 }
 
 

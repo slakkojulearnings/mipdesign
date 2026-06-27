@@ -10,7 +10,7 @@ from typing import Any
 
 from .models import Asset, Evidence, Relationship, SourceMember, now_iso, stable_id
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class AssetRepository(ABC):
@@ -101,7 +101,7 @@ class SQLiteGraphRepository(AssetRepository, RelationshipRepository, GraphSliceR
                 INSERT OR REPLACE INTO schema_version(version, backend, description, applied_at)
                 VALUES (?, 'sqlite', ?, ?)
                 """,
-                (SCHEMA_VERSION, "baseline plus persistent enrichment schema", now_iso()),
+                (SCHEMA_VERSION, "persistent enrichment plus external evidence schema", now_iso()),
             )
 
     def _migrate_schema(self, conn) -> None:
@@ -148,6 +148,8 @@ class SQLiteGraphRepository(AssetRepository, RelationshipRepository, GraphSliceR
             "enrichment_fact_source",
             "enrichment_member_status",
             "enrichment_job",
+            "runtime_observation",
+            "catalog_dataset",
             "source_member",
             "asset",
             "relationship",

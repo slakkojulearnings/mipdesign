@@ -27,8 +27,8 @@ import "./styles.css";
 
 const RELATIONSHIP_PRESETS = [
   { label: "All", value: "" },
-  { label: "Control", value: "CALLS,DYNAMIC_CALL,EXECUTES,INVOKES_PROC,STARTS_PROGRAM,STARTS_TRANSACTION,CONTAINS_PARAGRAPH,CONTAINS_SECTION,SECTION_CONTAINS_PARAGRAPH,CONTAINS_STATEMENT,CONTAINS_STEP,PERFORMS,BRANCHES_TO,EXECUTES_BEFORE,DEFINES_BUSINESS_RULE,DEFINES_TRANSFORMATION,DEFINES_CONDITION,CONTROLS_STEP,CONDITION_REFERENCES_STEP,CONDITION_CHECKS_RETURN_CODE,HANDLES_CICS_CONDITION,DEFINES_CICS_CONTRACT,EXPANDS_TO_STEP,EXPANDED_FROM_PROC_STEP" },
-  { label: "Data", value: "DECLARES_FIELD,DECLARES_COPYBOOK_FIELD,FIELD_DERIVED_FROM_COPYBOOK,USES_COPYBOOK_FIELD,FLOWS_TO,RULE_USES_FIELD,TRANSFORMATION_INPUT_FIELD,TRANSFORMATION_OUTPUT_FIELD,CONTRACT_USES_FIELD,HAS_RECORD_LAYOUT,RECORD_DECLARES_FIELD,READS_TABLE,WRITES_TABLE,READS_FILE,WRITES_FILE,USES_FILE,USES_DATASET,READS_DATASET,WRITES_DATASET,DECLARES_DD,BINDS_DATASET,DEFINES_FILE_IO,DEFINES_SORT_MERGE" },
+  { label: "Control", value: "CALLS,DYNAMIC_CALL,OBSERVED_CALLS,EXECUTES,INVOKES_PROC,STARTS_PROGRAM,STARTS_TRANSACTION,CONTAINS_PARAGRAPH,CONTAINS_SECTION,SECTION_CONTAINS_PARAGRAPH,CONTAINS_STATEMENT,CONTAINS_STEP,PERFORMS,BRANCHES_TO,EXECUTES_BEFORE,DEFINES_BUSINESS_RULE,DEFINES_TRANSFORMATION,DEFINES_CONDITION,CONTROLS_STEP,CONDITION_REFERENCES_STEP,CONDITION_CHECKS_RETURN_CODE,HANDLES_CICS_CONDITION,DEFINES_CICS_CONTRACT,DEFINES_COMMAREA_CONTRACT,DECLARES_ENTRY_CONTRACT,DEFINES_CALL_CONTRACT,CALL_CONTRACT_TARGETS,CALL_PASSES_FIELD,CALL_ARGUMENT_MAPS_TO_LINKAGE,EXPANDS_TO_STEP,EXPANDED_FROM_PROC_STEP" },
+  { label: "Data", value: "DECLARES_FIELD,DECLARES_COPYBOOK_FIELD,HAS_COPY_SITE,COPY_SITE_EXPANDS_COPYBOOK,COPY_SITE_DECLARES_FIELD,FIELD_DERIVED_FROM_COPYBOOK,MATERIALIZES_COPYBOOK_FIELD,USES_COPYBOOK_FIELD,FLOWS_TO,RULE_USES_FIELD,TRANSFORMATION_INPUT_FIELD,TRANSFORMATION_OUTPUT_FIELD,CONTRACT_USES_FIELD,ENTRY_CONTRACT_USES_FIELD,COMMAREA_CONTAINS_FIELD,HAS_RECORD_LAYOUT,RECORD_DECLARES_FIELD,READS_TABLE,WRITES_TABLE,READS_FILE,WRITES_FILE,USES_FILE,USES_DATASET,READS_DATASET,WRITES_DATASET,DECLARES_DD,BINDS_DATASET,NORMALIZES_TO_DATASET_IDENTITY,READS_DATASET_IDENTITY,WRITES_DATASET_IDENTITY,USES_DATASET_IDENTITY,BINDS_DATASET_IDENTITY,CATALOG_DESCRIBES_DATASET,CATALOG_ALIASES_DATASET,DEFINES_FILE_IO,DEFINES_SORT_MERGE" },
   { label: "DB2", value: "READS_TABLE,WRITES_TABLE,DEFINES_TABLE,DECLARES_TABLE,USES_DCLGEN,DCLGEN_DECLARES_TABLE,DEFINES_DB2_CURSOR,CURSOR_READS_TABLE,CURSOR_READS_COLUMN,CURSOR_FILTERS_BY_COLUMN,CURSOR_JOINS_ON_COLUMN,OPENS_DB2_CURSOR,FETCHES_DB2_CURSOR,CLOSES_DB2_CURSOR,DEFINES_DB2_PACKAGE,BINDS_PROGRAM,DEFINES_DB2_PLAN,USES_DB2_PACKAGE,DEFINES_DB2_STATEMENT,STATEMENT_READS_TABLE,STATEMENT_WRITES_TABLE,STATEMENT_READS_COLUMN,STATEMENT_WRITES_COLUMN,STATEMENT_FILTERS_BY_COLUMN,STATEMENT_JOINS_ON_COLUMN,STATEMENT_INPUTS_FROM_HOST_VARIABLE,STATEMENT_OUTPUTS_TO_HOST_VARIABLE,HOST_VARIABLE_BINDS_COLUMN" },
 ];
 
@@ -38,6 +38,9 @@ const HEATMAP_PRESETS = [
   { label: "Statements to tables", left: "DB2_STATEMENT", right: "TABLE", relationship: "STATEMENT_READS_TABLE" },
   { label: "Rules to fields", left: "BUSINESS_RULE", right: "FIELD", relationship: "RULE_USES_FIELD" },
   { label: "DDs to datasets", left: "JCL_DD", right: "DATASET", relationship: "BINDS_DATASET" },
+  { label: "Datasets to identity", left: "DATASET", right: "DATASET_IDENTITY", relationship: "NORMALIZES_TO_DATASET_IDENTITY" },
+  { label: "Catalog aliases", left: "DATASET", right: "DATASET_IDENTITY", relationship: "CATALOG_ALIASES_DATASET" },
+  { label: "Calls to fields", left: "INTERFACE_CONTRACT", right: "FIELD", relationship: "CALL_PASSES_FIELD" },
   { label: "Programs to copybook fields", left: "PROGRAM", right: "COPYBOOK_FIELD", relationship: "USES_COPYBOOK_FIELD" },
   { label: "Programs to files", left: "PROGRAM", right: "FILE", relationship: "READS_FILE" },
   { label: "Jobs to programs", left: "JOB", right: "PROGRAM", relationship: "EXECUTES" },
@@ -55,6 +58,7 @@ const NODE_SCOPE_PRESETS = [
 const FLOW_EDGE_TYPES = new Set([
   "CALLS",
   "DYNAMIC_CALL",
+  "OBSERVED_CALLS",
   "EXECUTES",
   "INVOKES_PROC",
   "STARTS_PROGRAM",
@@ -66,17 +70,29 @@ const FLOW_EDGE_TYPES = new Set([
   "EXECUTES_BEFORE",
   "DEFINES_CONDITION",
   "CONTROLS_STEP",
+  "DECLARES_ENTRY_CONTRACT",
+  "ENTRY_CONTRACT_USES_FIELD",
+  "DEFINES_CALL_CONTRACT",
+  "CALL_CONTRACT_TARGETS",
+  "CALL_PASSES_FIELD",
+  "CALL_ARGUMENT_MAPS_TO_LINKAGE",
   "EXPANDS_TO_STEP",
   "EXPANDED_FROM_PROC_STEP",
   "DECLARES_FIELD",
   "DECLARES_COPYBOOK_FIELD",
+  "HAS_COPY_SITE",
+  "COPY_SITE_EXPANDS_COPYBOOK",
+  "COPY_SITE_DECLARES_FIELD",
   "FIELD_DERIVED_FROM_COPYBOOK",
+  "MATERIALIZES_COPYBOOK_FIELD",
   "USES_COPYBOOK_FIELD",
   "FLOWS_TO",
   "RULE_USES_FIELD",
   "TRANSFORMATION_INPUT_FIELD",
   "TRANSFORMATION_OUTPUT_FIELD",
   "CONTRACT_USES_FIELD",
+  "DEFINES_COMMAREA_CONTRACT",
+  "COMMAREA_CONTAINS_FIELD",
   "HAS_RECORD_LAYOUT",
   "RECORD_DECLARES_FIELD",
   "READS_TABLE",
@@ -112,6 +128,13 @@ const FLOW_EDGE_TYPES = new Set([
   "WRITES_DATASET",
   "DECLARES_DD",
   "BINDS_DATASET",
+  "NORMALIZES_TO_DATASET_IDENTITY",
+  "READS_DATASET_IDENTITY",
+  "WRITES_DATASET_IDENTITY",
+  "USES_DATASET_IDENTITY",
+  "BINDS_DATASET_IDENTITY",
+  "CATALOG_DESCRIBES_DATASET",
+  "CATALOG_ALIASES_DATASET",
   "DEFINES_FILE_IO",
   "DEFINES_SORT_MERGE",
 ]);
@@ -120,6 +143,7 @@ function App() {
   const [stats, setStats] = useState(null);
   const [validation, setValidation] = useState(null);
   const [enrichmentCoverage, setEnrichmentCoverage] = useState(null);
+  const [externalEvidence, setExternalEvidence] = useState(null);
   const [performance, setPerformance] = useState(null);
   const [corrections, setCorrections] = useState([]);
   const [scorecards, setScorecards] = useState([]);
@@ -162,13 +186,14 @@ function App() {
   const loadHome = async () => {
     setBusy(true);
     try {
-      const [s, r, c, h, v, enrichCov, perf, correctionPayload, scorecardPayload, d, svc, road, insightPayload, nodeList] = await Promise.all([
+      const [s, r, c, h, v, enrichCov, externalPayload, perf, correctionPayload, scorecardPayload, d, svc, road, insightPayload, nodeList] = await Promise.all([
         api.stats(),
         api.roots({ limit: 100 }),
         api.clusters({ limit: 100 }),
         api.heatmap(heatmapPreset),
         api.validate(),
         api.enrichmentCoverage(),
+        api.externalEvidence(),
         api.performance({ limit: 25 }),
         api.corrections(),
         api.scorecards({ limit: 25 }),
@@ -184,6 +209,7 @@ function App() {
       setHeatmap(h);
       setValidation(v);
       setEnrichmentCoverage(enrichCov.coverage || null);
+      setExternalEvidence(externalPayload || null);
       setPerformance(perf);
       setCorrections(correctionPayload.corrections || []);
       setScorecards(scorecardPayload.scorecards || []);
@@ -455,6 +481,7 @@ function App() {
             stats={stats}
             validation={validation}
             enrichmentCoverage={enrichmentCoverage}
+            externalEvidence={externalEvidence}
             roots={roots}
             clusters={clusters}
             assetTypes={assetTypes}
@@ -536,8 +563,14 @@ function App() {
   );
 }
 
-function Dashboard({ run, stats, validation, enrichmentCoverage, roots, clusters, assetTypes, relationshipCounts, onOpenGraph }) {
+function Dashboard({ run, stats, validation, enrichmentCoverage, externalEvidence, roots, clusters, assetTypes, relationshipCounts, onOpenGraph }) {
   const topRisk = [...roots].sort((a, b) => Number(b.risk_score || 0) - Number(a.risk_score || 0)).slice(0, 6);
+  const runtimeRows = externalEvidence?.runtime_observations || [];
+  const catalogRows = externalEvidence?.catalog_datasets || [];
+  const runtimeCount = runtimeRows.reduce((total, row) => total + Number(row.count || 0), 0);
+  const observedCalls = runtimeRows.reduce((total, row) => total + Number(row.observed_count || 0), 0);
+  const catalogCount = catalogRows.reduce((total, row) => total + Number(row.count || 0), 0);
+  const catalogIdentities = catalogRows.reduce((total, row) => total + Number(row.identities || 0), 0);
   return (
     <div className="dashboard-grid">
       <Panel title="Run Overview" icon={<ServerCog />}>
@@ -564,6 +597,16 @@ function Dashboard({ run, stats, validation, enrichmentCoverage, roots, clusters
           <Metric icon={<ClipboardCheck />} label="Coverage" value={`${enrichmentCoverage?.enriched_pct ?? 0}%`} />
         </div>
         <p className="small-muted">ANTLR deep parsing is persistent enrichment. Baseline facts remain usable when coverage is incomplete.</p>
+      </Panel>
+
+      <Panel title="External Evidence" icon={<ShieldCheck />}>
+        <div className="metric-grid">
+          <Metric icon={<Activity />} label="Runtime Edges" value={runtimeCount} />
+          <Metric icon={<GitBranch />} label="Observed Calls" value={observedCalls} />
+          <Metric icon={<Database />} label="Catalog Rows" value={catalogCount} />
+          <Metric icon={<ClipboardCheck />} label="Identities" value={catalogIdentities} />
+        </div>
+        <p className="small-muted">Runtime and catalog imports add confirmed evidence without overwriting static source facts.</p>
       </Panel>
 
       <Panel title="Root Driver Portfolio" icon={<Network />}>

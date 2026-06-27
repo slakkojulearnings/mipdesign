@@ -18,6 +18,7 @@ DATA_ASSET_TYPES = {
     "DB2_PLAN",
     "FILE",
     "DATASET",
+    "DATASET_IDENTITY",
     "COPYBOOK",
     "COPYBOOK_FIELD",
     "MQ_QUEUE",
@@ -71,11 +72,14 @@ READ_RELS = {
     "USES_FILE",
     "DECLARES_DD",
     "BINDS_DATASET",
+    "CATALOG_DESCRIBES_DATASET",
+    "CATALOG_ALIASES_DATASET",
 }
 ENTRY_RELS = {"EXECUTES", "INVOKES_PROC", "STARTS_PROGRAM", "STARTS_TRANSACTION", "TRIGGERS"}
 CONTROL_RELS = {
     "CALLS",
     "DYNAMIC_CALL",
+    "OBSERVED_CALLS",
     "EXECUTES",
     "INVOKES_PROC",
     "STARTS_PROGRAM",
@@ -286,21 +290,41 @@ class DomainArchitectureService:
     @staticmethod
     def _decision_gates(relationships: list[dict[str, Any]]) -> dict[str, bool]:
         interface_contracts = any(
-            rel.get("relationship_type") == "CALLS" and (rel.get("attributes") or {}).get("using")
+            rel.get("relationship_type")
+            in {
+                "DECLARES_ENTRY_CONTRACT",
+                "ENTRY_CONTRACT_USES_FIELD",
+                "DEFINES_CALL_CONTRACT",
+                "CALL_PASSES_FIELD",
+                "CALL_ARGUMENT_MAPS_TO_LINKAGE",
+            }
+            or (rel.get("relationship_type") == "CALLS" and (rel.get("attributes") or {}).get("using"))
             for rel in relationships
         )
         commarea_contracts = any(
-            rel.get("relationship_type") in {"USES_CICS_CONTRACT", "CICS_CONTRACT_USES_FIELD", "CONTRACT_USES_FIELD"}
-            or rel.get("target_type") == "CICS_CONTRACT"
+            rel.get("relationship_type") in {"DEFINES_COMMAREA_CONTRACT", "COMMAREA_CONTAINS_FIELD"}
+            or (
+                rel.get("relationship_type") == "CONTRACT_USES_FIELD"
+                and (rel.get("attributes") or {}).get("contract_role") == "commarea"
+            )
             for rel in relationships
         )
         dataset_identity = any(
             rel.get("relationship_type")
-            in {"BINDS_DATASET", "USES_DATASET", "READS_DATASET", "WRITES_DATASET", "HAS_RECORD_LAYOUT"}
+            in {
+                "NORMALIZES_TO_DATASET_IDENTITY",
+                "READS_DATASET_IDENTITY",
+                "WRITES_DATASET_IDENTITY",
+                "USES_DATASET_IDENTITY",
+                "BINDS_DATASET_IDENTITY",
+                "CATALOG_DESCRIBES_DATASET",
+                "CATALOG_ALIASES_DATASET",
+            }
             for rel in relationships
         )
         bounded_copybook_layout = any(
-            rel.get("relationship_type") in {"HAS_COPY_SITE", "FIELD_OVERRIDE", "DECLARES_FIELD"}
+            rel.get("relationship_type")
+            in {"HAS_COPY_SITE", "COPY_SITE_DECLARES_FIELD", "MATERIALIZES_COPYBOOK_FIELD"}
             and (rel.get("attributes") or {}).get("bounded_copybook_layout")
             for rel in relationships
         )

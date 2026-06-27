@@ -29,6 +29,26 @@ export const api = {
     ).then(parse),
   enrichmentCoverage: (runId = "") =>
     fetch(`/api/enrichment/coverage${runId ? `?${query({ run_id: runId })}` : ""}`).then(parse),
+  externalEvidence: (runId = "") =>
+    fetch(`/api/external/evidence${runId ? `?${query({ run_id: runId })}` : ""}`).then(parse),
+  importRuntime: ({ path, runId = "", sourceSystem = "runtime" }) =>
+    fetch(
+      `/api/external/runtime?${query({
+        path,
+        source_system: sourceSystem,
+        ...(runId ? { run_id: runId } : {}),
+      })}`,
+      { method: "POST" }
+    ).then(parse),
+  importCatalog: ({ path, runId = "", catalogSource = "catalog" }) =>
+    fetch(
+      `/api/external/catalog?${query({
+        path,
+        catalog_source: catalogSource,
+        ...(runId ? { run_id: runId } : {}),
+      })}`,
+      { method: "POST" }
+    ).then(parse),
   parseStatus: (asset, runId = "") =>
     fetch(`/api/parser/status/${encodeURIComponent(asset)}${runId ? `?${query({ run_id: runId })}` : ""}`).then(parse),
   performance: ({ runId = "", limit = 25 } = {}) =>

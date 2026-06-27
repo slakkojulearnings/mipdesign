@@ -23,6 +23,8 @@ from .repositories import SQLiteGraphRepository
 EXTRACTOR = "mainframe_scanner_v1"
 TEXT_LIMIT_BYTES = 4_000_000
 FIELD_FLOW_LIMIT = 500  # max field-lineage flows persisted per program (truncation flagged)
+COPYBOOK_SITE_FIELD_LIMIT = 128
+DATA_DICTIONARY_GRAPH_LIMIT = 256
 DEFAULT_EXCLUDED_DIRS = (".git",)
 
 FOLDER_TYPES = (
@@ -854,9 +856,10 @@ def _persist_graph(
             )
         )
     with repository.connect() as conn:
-        for item in members:
-            _upsert_member(conn, item.member)
-        for asset in sorted(assets.values(), key=lambda value: (value.asset_type, value.technical_name)):
+        _upsert_members(conn, [item.member for item in members])
+        ordered_assets = sorted(assets.values(), key=lambda value: (value.asset_type, value.technical_name))
+        asset_evidence_rows: list[tuple[Asset, list[Evidence]]] = []
+        for asset in ordered_assets:
             evidence = list(asset_evidence.get(asset.asset_id, []))
             if asset.member_id:
                 evidence.insert(
@@ -870,7 +873,17 @@ def _persist_graph(
                         validation_status=asset.validation_status,
                     ),
                 )
-            _upsert_asset(conn, repository, asset, evidence)
+            asset_evidence_rows.append((asset, evidence))
+        _upsert_assets(conn, ordered_assets)
+        _insert_evidence_batch(
+            conn,
+            [
+                (asset.run_id, "ASSET", asset.asset_id, item)
+                for asset, evidence in asset_evidence_rows
+                for item in evidence
+            ],
+        )
+        relationship_rows: list[tuple[Relationship, list[Evidence]]] = []
         for rel in sorted(
             relationships,
             key=lambda value: (
@@ -891,7 +904,16 @@ def _persist_graph(
                 discovery_method=rel.discovery_method,
                 attributes=rel.attributes or {},
             )
-            _insert_relationship(conn, repository, relationship, [rel.evidence])
+            relationship_rows.append((relationship, [rel.evidence]))
+        _insert_relationships(conn, [relationship for relationship, _ in relationship_rows])
+        _insert_evidence_batch(
+            conn,
+            [
+                (relationship.run_id, "RELATIONSHIP", relationship.relationship_id, item)
+                for relationship, evidence in relationship_rows
+                for item in evidence
+            ],
+        )
 
 
 def _upsert_member(conn, member: SourceMember) -> None:
@@ -934,6 +956,54 @@ def _upsert_member(conn, member: SourceMember) -> None:
             member.validation_status,
             member.discovered_at,
         ),
+    )
+
+
+def _upsert_members(conn, members: list[SourceMember]) -> None:
+    if not members:
+        return
+    conn.executemany(
+        """
+        INSERT INTO source_member(
+            member_id, run_id, relative_path, folder_path, member_name, sha256,
+            size_bytes, encoding, is_binary, text_status, artifact_type,
+            classification_basis, confidence, validation_status, discovered_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(member_id) DO UPDATE SET
+            relative_path = excluded.relative_path,
+            folder_path = excluded.folder_path,
+            member_name = excluded.member_name,
+            sha256 = excluded.sha256,
+            size_bytes = excluded.size_bytes,
+            encoding = excluded.encoding,
+            is_binary = excluded.is_binary,
+            text_status = excluded.text_status,
+            artifact_type = excluded.artifact_type,
+            classification_basis = excluded.classification_basis,
+            confidence = excluded.confidence,
+            validation_status = excluded.validation_status,
+            discovered_at = excluded.discovered_at
+        """,
+        [
+            (
+                member.member_id,
+                member.run_id,
+                member.relative_path,
+                member.folder_path,
+                member.member_name,
+                member.sha256,
+                member.size_bytes,
+                member.encoding,
+                int(member.is_binary),
+                member.text_status,
+                member.artifact_type,
+                member.classification_basis,
+                member.confidence,
+                member.validation_status,
+                member.discovered_at,
+            )
+            for member in members
+        ],
     )
 
 
@@ -985,6 +1055,52 @@ def _upsert_asset(
         repository._insert_evidence(conn, asset.run_id, "ASSET", asset.asset_id, item)
 
 
+def _upsert_assets(conn, assets: list[Asset]) -> None:
+    if not assets:
+        return
+    conn.executemany(
+        """
+        INSERT INTO asset(
+            asset_id, run_id, asset_type, technical_name, display_name, member_id,
+            folder_path, confidence, validation_status, discovery_method,
+            attributes_json, origin, enriched_by_member, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(asset_id) DO UPDATE SET
+            asset_type = excluded.asset_type,
+            technical_name = excluded.technical_name,
+            display_name = excluded.display_name,
+            member_id = excluded.member_id,
+            folder_path = excluded.folder_path,
+            confidence = excluded.confidence,
+            validation_status = excluded.validation_status,
+            discovery_method = excluded.discovery_method,
+            attributes_json = excluded.attributes_json,
+            origin = excluded.origin,
+            enriched_by_member = excluded.enriched_by_member,
+            created_at = excluded.created_at
+        """,
+        [
+            (
+                asset.asset_id,
+                asset.run_id,
+                asset.asset_type,
+                asset.technical_name.upper(),
+                asset.display_name or asset.technical_name.upper(),
+                asset.member_id,
+                asset.folder_path,
+                asset.confidence,
+                asset.validation_status,
+                asset.discovery_method,
+                json.dumps(asset.attributes, sort_keys=True),
+                asset.origin,
+                asset.enriched_by_member,
+                asset.created_at,
+            )
+            for asset in assets
+        ],
+    )
+
+
 def _insert_relationship(
     conn,
     repository: SQLiteGraphRepository,
@@ -1029,6 +1145,89 @@ def _insert_relationship(
         repository._insert_evidence(
             conn, relationship.run_id, "RELATIONSHIP", relationship.relationship_id, item
         )
+
+
+def _insert_relationships(conn, relationships: list[Relationship]) -> None:
+    if not relationships:
+        return
+    conn.executemany(
+        """
+        INSERT INTO relationship(
+            relationship_id, run_id, relationship_type, source_asset_id,
+            target_asset_id, confidence, validation_status, discovery_method,
+            attributes_json, origin, enriched_by_member, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(relationship_id) DO UPDATE SET
+            relationship_type = excluded.relationship_type,
+            source_asset_id = excluded.source_asset_id,
+            target_asset_id = excluded.target_asset_id,
+            confidence = excluded.confidence,
+            validation_status = excluded.validation_status,
+            discovery_method = excluded.discovery_method,
+            attributes_json = excluded.attributes_json,
+            origin = excluded.origin,
+            enriched_by_member = excluded.enriched_by_member,
+            created_at = excluded.created_at
+        """,
+        [
+            (
+                relationship.relationship_id,
+                relationship.run_id,
+                relationship.relationship_type,
+                relationship.source_asset_id,
+                relationship.target_asset_id,
+                relationship.confidence,
+                relationship.validation_status,
+                relationship.discovery_method,
+                json.dumps(relationship.attributes, sort_keys=True),
+                relationship.origin,
+                relationship.enriched_by_member,
+                relationship.created_at,
+            )
+            for relationship in relationships
+        ],
+    )
+
+
+def _insert_evidence_batch(conn, rows: list[tuple[str, str, str, Evidence]]) -> None:
+    if not rows:
+        return
+    created_at = now_iso()
+    conn.executemany(
+        """
+        INSERT OR REPLACE INTO evidence(
+            evidence_id, run_id, entity_kind, entity_id, source_path, line_start,
+            line_end, evidence_text, extractor, discovery_method, confidence,
+            validation_status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                stable_id(
+                    run_id,
+                    "evidence",
+                    entity_kind,
+                    entity_id,
+                    evidence.source_path,
+                    evidence.line_start,
+                    evidence.evidence_text,
+                ),
+                run_id,
+                entity_kind,
+                entity_id,
+                evidence.source_path,
+                evidence.line_start,
+                evidence.line_end,
+                evidence.evidence_text,
+                evidence.extractor,
+                evidence.discovery_method,
+                evidence.confidence,
+                evidence.validation_status,
+                created_at,
+            )
+            for run_id, entity_kind, entity_id, evidence in rows
+        ],
+    )
 
 
 def _scan_validation_snapshot(repository: SQLiteGraphRepository, run_id: str) -> dict[str, Any]:
@@ -1726,6 +1925,10 @@ def _asset_for_member(item: ClassifiedMember, analysis: dict[str, Any] | None = 
                     row for row in analysis.get("data_items", [])
                     if str(row.get("section") or "").upper() == "LINKAGE"
                 ],
+                "entry_contract": {
+                    "procedure_using": _procedure_using_args(item.text),
+                    "linkage_fields": _linkage_top_level_fields(analysis),
+                },
                 "procedure_outline": analysis.get("procedure_outline", []),
                 "business_rules": _business_rules_with_path(analysis, item.member.relative_path),
                 "ast_tree": ast_tree(analysis),
@@ -1788,22 +1991,24 @@ def _relationships_for_member(
         return []
     artifact_type = item.member.artifact_type
     if artifact_type == "COBOL":
-        return _cobol_relationships(item, source, analysis)
-    if artifact_type == "PLI":
-        return _pli_relationships(item, source)
-    if artifact_type == "ASSEMBLER":
-        return _assembler_relationships(item, source)
-    if artifact_type in {"JCL", "PROC"}:
-        return _jcl_relationships(item, source)
-    if artifact_type in {"SQL_DDL", "DCLGEN"}:
-        return _sql_relationships(item, source)
-    if artifact_type == "IMS":
-        return _ims_relationships(item, source)
-    if artifact_type == "CSD":
-        return _csd_relationships(item, source)
-    if artifact_type == "SCHEDULER":
-        return _scheduler_relationships(item, source)
-    return []
+        relationships = _cobol_relationships(item, source, analysis)
+    elif artifact_type == "PLI":
+        relationships = _pli_relationships(item, source)
+    elif artifact_type == "ASSEMBLER":
+        relationships = _assembler_relationships(item, source)
+    elif artifact_type in {"JCL", "PROC"}:
+        relationships = _jcl_relationships(item, source)
+    elif artifact_type in {"SQL_DDL", "DCLGEN"}:
+        relationships = _sql_relationships(item, source)
+    elif artifact_type == "IMS":
+        relationships = _ims_relationships(item, source)
+    elif artifact_type == "CSD":
+        relationships = _csd_relationships(item, source)
+    elif artifact_type == "SCHEDULER":
+        relationships = _scheduler_relationships(item, source)
+    else:
+        relationships = []
+    return _with_dataset_identity_relationships(item, relationships)
 
 
 def _cross_member_relationships(
@@ -1848,13 +2053,104 @@ def _cross_member_relationships(
             if not info:
                 continue
             line_no = int(copy.get("line") or _line_for_text(item.lines, f"COPY {copy_name}") or 1)
-            line = _line_at(item.lines, line_no)
-            for field in info["fields"]:
-                field_name = _clean_name(str(field.get("name", "")))
-                if not field_name:
+            copy_statement = _copy_statement_at(item.lines, line_no)
+            line = copy_statement["text"] or _line_at(item.lines, line_no)
+            copy_attrs = _copy_attributes(line)
+            replacement_pairs = copy_attrs.get("replacement_pairs", [])
+            copy_site = _copy_site_asset(
+                item.member.run_id,
+                program.technical_name,
+                copy_name,
+                line_no,
+                replacement_pairs,
+                info["item"].member.relative_path,
+            )
+            _append_found(
+                found,
+                seen,
+                _found_existing(
+                    item,
+                    program,
+                    "HAS_COPY_SITE",
+                    copy_site,
+                    line_no,
+                    line,
+                    confidence=0.84,
+                    validation_status="inferred",
+                    discovery_method="copybook-expansion",
+                    attributes=copy_site.attributes,
+                ),
+            )
+            _append_found(
+                found,
+                seen,
+                _found_existing(
+                    item,
+                    copy_site,
+                    "COPY_SITE_EXPANDS_COPYBOOK",
+                    info["asset"],
+                    line_no,
+                    line,
+                    confidence=0.84,
+                    validation_status="inferred",
+                    discovery_method="copybook-expansion",
+                    attributes={"copybook": copy_name, "copy_site": copy_site.technical_name},
+                ),
+            )
+            selected_fields, selection_attrs = _selected_copybook_site_fields(
+                analysis,
+                item,
+                info["fields"],
+                replacement_pairs,
+            )
+            for field in selected_fields:
+                original_field = _clean_name(str(field.get("name", "")))
+                if not original_field:
                     continue
-                program_field = _field_asset(item.member.run_id, program.technical_name, field_name, confidence=0.78, validation_status="inferred")
+                materialized_field = _apply_copy_replacements_to_name(original_field, replacement_pairs)
+                program_field = _field_asset(
+                    item.member.run_id,
+                    program.technical_name,
+                    materialized_field,
+                    confidence=0.82,
+                    validation_status="inferred",
+                    attributes={
+                        **_bounded_copybook_attrs(copy_site, copy_name, original_field, materialized_field, replacement_pairs),
+                        **selection_attrs,
+                        "level": field.get("level"),
+                        "pic": field.get("pic"),
+                        "redefines": _apply_copy_replacements_to_name(str(field.get("redefines") or ""), replacement_pairs) if field.get("redefines") else None,
+                        "occurs": field.get("occurs"),
+                        "occurs_to": field.get("occurs_to"),
+                        "depending_on": _apply_copy_replacements_to_name(str(field.get("depending_on") or ""), replacement_pairs) if field.get("depending_on") else None,
+                        "usage": field.get("usage"),
+                    },
+                )
                 copy_field = _copybook_field_asset(item.member.run_id, copy_name, field, confidence=0.88)
+                bounded_attrs = {
+                    **_bounded_copybook_attrs(copy_site, copy_name, original_field, materialized_field, replacement_pairs),
+                    **selection_attrs,
+                }
+                _append_found(
+                    found,
+                    seen,
+                    _found_existing(
+                        item,
+                        copy_site,
+                        "COPY_SITE_DECLARES_FIELD",
+                        program_field,
+                        line_no,
+                        line,
+                        confidence=0.82,
+                        validation_status="inferred",
+                        discovery_method="copybook-expansion",
+                        attributes={
+                            **bounded_attrs,
+                            "level": field.get("level"),
+                            "pic": field.get("pic"),
+                        },
+                    ),
+                )
                 _append_found(
                     found,
                     seen,
@@ -1879,8 +2175,31 @@ def _cross_member_relationships(
                         attributes={
                             "program": program.technical_name,
                             "copybook": copy_name,
-                            "field": field_name,
+                            "field": materialized_field,
+                            "original_field": original_field,
                             "copybook_source_path": info["item"].member.relative_path,
+                            "bounded_copybook_layout": True,
+                            "copy_site": copy_site.technical_name,
+                            "replacement_pairs": replacement_pairs,
+                        },
+                    ),
+                )
+                _append_found(
+                    found,
+                    seen,
+                    _found_existing(
+                        item,
+                        program_field,
+                        "MATERIALIZES_COPYBOOK_FIELD",
+                        copy_field,
+                        line_no,
+                        line,
+                        confidence=0.82,
+                        validation_status="inferred",
+                        discovery_method="copybook-expansion",
+                        attributes={
+                            **bounded_attrs,
+                            "copybook_field": copy_field.technical_name,
                         },
                     ),
                 )
@@ -1897,12 +2216,243 @@ def _cross_member_relationships(
                         confidence=0.78,
                         validation_status="inferred",
                         discovery_method="copybook-expansion",
-                        attributes={"copybook": copy_name, "field": field_name},
+                        attributes={
+                            "copybook": copy_name,
+                            "field": materialized_field,
+                            "original_field": original_field,
+                            "bounded_copybook_layout": True,
+                            "copy_site": copy_site.technical_name,
+                        },
                     ),
                 )
+    for rel in _call_argument_mapping_relationships(members, member_assets, cobol_analysis):
+        _append_found(found, seen, rel)
     for rel in _proc_expansion_relationships(members, member_assets):
         _append_found(found, seen, rel)
     return found
+
+
+def _copy_statement_at(lines: tuple[str, ...], start_line: int) -> dict[str, Any]:
+    text_parts: list[str] = []
+    end_line = start_line
+    for index in range(max(start_line, 1), len(lines) + 1):
+        line = _line_at(lines, index)
+        text_parts.append(line.strip())
+        end_line = index
+        if "." in line:
+            break
+    return {"line": start_line, "end_line": end_line, "text": " ".join(text_parts).strip()}
+
+
+def _copy_site_asset(
+    run_id: str,
+    program_name: str,
+    copybook_name: str,
+    line_no: int,
+    replacement_pairs: list[dict[str, str]],
+    copybook_source_path: str,
+) -> Asset:
+    program = _clean_name(program_name)
+    copybook = _clean_name(copybook_name)
+    digest = stable_id("copy_site", program, copybook, line_no, replacement_pairs)
+    return Asset(
+        run_id=run_id,
+        asset_type="COPY_SITE",
+        technical_name=f"{program}::COPY::{line_no}::{copybook}::{digest}",
+        display_name=f"{copybook} line {line_no}",
+        confidence=0.84,
+        validation_status="inferred",
+        discovery_method="copybook-expansion",
+        attributes={
+            "program": program,
+            "copybook": copybook,
+            "line": line_no,
+            "replacement_pairs": replacement_pairs,
+            "copybook_source_path": copybook_source_path,
+            "bounded_copybook_layout": True,
+        },
+    )
+
+
+def _bounded_copybook_attrs(
+    copy_site: Asset,
+    copybook_name: str,
+    original_field: str,
+    materialized_field: str,
+    replacement_pairs: list[dict[str, str]],
+) -> dict[str, Any]:
+    return {
+        "copy_site": copy_site.technical_name,
+        "copybook": _clean_name(copybook_name),
+        "original_field": _clean_name(original_field),
+        "materialized_field": _clean_name(materialized_field),
+        "replacement_pairs": replacement_pairs,
+        "bounded_copybook_layout": True,
+    }
+
+
+def _apply_copy_replacements_to_name(value: str, replacement_pairs: list[dict[str, str]]) -> str:
+    name = _clean_name(value)
+    if not name:
+        return ""
+    for pair in replacement_pairs:
+        src = _clean_name(str(pair.get("from") or ""))
+        dst = _clean_name(str(pair.get("to") or ""))
+        if src and dst:
+            name = re.sub(re.escape(src), dst, name, flags=re.I)
+    return _clean_name(name)
+
+
+def _selected_copybook_site_fields(
+    analysis: dict[str, Any],
+    item: ClassifiedMember,
+    fields: list[dict[str, Any]],
+    replacement_pairs: list[dict[str, str]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    if not fields:
+        return [], {
+            "copybook_field_materialization": "none",
+            "materialized_field_count": 0,
+            "source_field_count": 0,
+            "materialization_truncated": False,
+        }
+    if len(fields) <= COPYBOOK_SITE_FIELD_LIMIT:
+        return fields, {
+            "copybook_field_materialization": "complete_small_copybook",
+            "field_selection_reason": "within_materialization_limit",
+            "materialized_field_count": len(fields),
+            "source_field_count": len(fields),
+            "materialization_truncated": False,
+            "materialization_limit": COPYBOOK_SITE_FIELD_LIMIT,
+        }
+    references = _program_field_reference_names(analysis, item)
+    top_level: list[dict[str, Any]] = []
+    used: list[dict[str, Any]] = []
+    seen_top: set[str] = set()
+    seen_used: set[str] = set()
+    for field in fields:
+        original = _clean_name(str(field.get("name", "")))
+        if not original:
+            continue
+        materialized = _apply_copy_replacements_to_name(original, replacement_pairs)
+        level = str(field.get("level") or "").zfill(2)
+        if level in {"01", "77"} and original not in seen_top:
+            top_level.append(field)
+            seen_top.add(original)
+        if _copybook_field_is_referenced(original, materialized, references) and original not in seen_used:
+            used.append(field)
+            seen_used.add(original)
+    if not used:
+        selected = fields[:COPYBOOK_SITE_FIELD_LIMIT]
+        return selected, {
+            "copybook_field_materialization": "bounded_sample_no_usage",
+            "field_selection_reason": "no_behavioral_field_reference_detected",
+            "materialized_field_count": len(selected),
+            "source_field_count": len(fields),
+            "materialization_truncated": len(fields) > len(selected),
+            "materialization_limit": COPYBOOK_SITE_FIELD_LIMIT,
+        }
+    used = _expand_used_copybook_groups(fields, used)
+    selected: list[dict[str, Any]] = []
+    selected_names: set[str] = set()
+    for field in [*top_level, *used]:
+        name = _clean_name(str(field.get("name", "")))
+        if not name or name in selected_names:
+            continue
+        selected.append(field)
+        selected_names.add(name)
+        if len(selected) >= COPYBOOK_SITE_FIELD_LIMIT:
+            break
+    return selected, {
+        "copybook_field_materialization": "bounded_used_fields",
+        "field_selection_reason": "referenced_by_program_behavior",
+        "materialized_field_count": len(selected),
+        "source_field_count": len(fields),
+        "used_field_reference_count": len(used),
+        "materialization_truncated": len(used) + len(top_level) > len(selected),
+        "materialization_limit": COPYBOOK_SITE_FIELD_LIMIT,
+    }
+
+
+def _expand_used_copybook_groups(fields: list[dict[str, Any]], used: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    used_names = {_clean_name(str(field.get("name", ""))) for field in used}
+    expanded: list[dict[str, Any]] = []
+    active_group_levels: list[int] = []
+    for field in fields:
+        name = _clean_name(str(field.get("name", "")))
+        level = _int_level(field.get("level"))
+        while active_group_levels and level <= active_group_levels[-1]:
+            active_group_levels.pop()
+        if name in used_names:
+            expanded.append(field)
+            if level < 49:
+                active_group_levels.append(level)
+            continue
+        if active_group_levels:
+            expanded.append(field)
+    return expanded or used
+
+
+def _int_level(value: Any) -> int:
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return 99
+
+
+def _program_field_reference_names(analysis: dict[str, Any], item: ClassifiedMember) -> set[str]:
+    names: set[str] = set()
+    for flow in analysis.get("field_flows", []) or []:
+        for key in ("src", "dst", "source_field", "target_field"):
+            names.update(_field_reference_variants(flow.get(key)))
+    for call in analysis.get("calls", []) or []:
+        names.update(_field_reference_variants(call.get("via")))
+        for arg in call.get("using", []) or call.get("arguments", []) or []:
+            names.update(_field_reference_variants(arg))
+    for section in ("sql", "cics", "business_rules"):
+        _collect_reference_names(analysis.get(section), names)
+    names.update(_clean_name(token) for token in re.findall(r"\b[A-Z][A-Z0-9#$@_-]*\b", _procedure_division_text(item.text).upper()))
+    return {name for name in names if name}
+
+
+def _collect_reference_names(value: Any, names: set[str]) -> None:
+    if isinstance(value, dict):
+        for item in value.values():
+            _collect_reference_names(item, names)
+    elif isinstance(value, list):
+        for item in value:
+            _collect_reference_names(item, names)
+    elif isinstance(value, str):
+        names.update(_field_reference_variants(value))
+
+
+def _field_reference_variants(value: Any) -> set[str]:
+    text = _clean_name(str(value or ""))
+    if not text:
+        return set()
+    variants = {text}
+    for part in re.split(r"[^A-Z0-9#$@_.-]+", text):
+        cleaned = _clean_name(part)
+        if cleaned:
+            variants.add(cleaned)
+            if "." in cleaned:
+                variants.add(cleaned.rsplit(".", 1)[-1])
+    if "." in text:
+        variants.add(text.rsplit(".", 1)[-1])
+    return variants
+
+
+def _copybook_field_is_referenced(original: str, materialized: str, references: set[str]) -> bool:
+    candidates = {original, materialized}
+    for value in list(candidates):
+        if "-" in value:
+            candidates.add(value.replace("-", ""))
+    return any(candidate in references for candidate in candidates if candidate)
+
+
+def _procedure_division_text(text: str) -> str:
+    match = re.search(r"\bPROCEDURE\s+DIVISION\b", text, flags=re.I)
+    return text[match.start():] if match else text
 
 
 def _copybook_field_index(
@@ -2065,26 +2615,25 @@ def _proc_expansion_relationships(
                     )
                 for dataset in proc_step.get("datasets", []):
                     dsn = _substitute_jcl_symbols(dataset["dsn"], params)
-                    found.append(
-                        _found_existing(
-                            item,
-                            expanded_step,
-                            dataset["relationship_type"],
-                            _asset(item.member.run_id, "DATASET", dsn, confidence=0.68, validation_status="inferred"),
-                            invocation["line"],
-                            _line_at(item.lines, invocation["line"]),
-                            confidence=0.68,
-                            validation_status="inferred",
-                            discovery_method="proc-expansion",
-                            attributes={
-                                "expanded_from_proc": proc_name,
-                                "proc_step": proc_step["step_name"],
-                                "dd_name": dataset.get("dd_name"),
-                                "disp": dataset.get("disp"),
-                                "unresolved_symbolics": _unresolved_symbolics(dsn),
-                            },
-                        )
+                    rel = _found_existing(
+                        item,
+                        expanded_step,
+                        dataset["relationship_type"],
+                        _asset(item.member.run_id, "DATASET", dsn, confidence=0.68, validation_status="inferred"),
+                        invocation["line"],
+                        _line_at(item.lines, invocation["line"]),
+                        confidence=0.68,
+                        validation_status="inferred",
+                        discovery_method="proc-expansion",
+                        attributes={
+                            "expanded_from_proc": proc_name,
+                            "proc_step": proc_step["step_name"],
+                            "dd_name": dataset.get("dd_name"),
+                            "disp": dataset.get("disp"),
+                            "unresolved_symbolics": _unresolved_symbolics(dsn),
+                        },
                     )
+                    found.extend(_with_dataset_identity_relationships(item, [rel]))
     return found
 
 
@@ -2217,7 +2766,11 @@ def _cobol_relationships(
             _clean_name(str(row.get("name", ""))): row
             for row in analysis.get("copy_resolution", [])
         }
-        using_by_line = _call_using_by_line(item.lines)
+        call_contracts_by_line = _call_contracts_by_line(item.lines)
+        using_by_line = {
+            line_no: [arg["name"] for arg in contract.get("arguments", [])]
+            for line_no, contract in call_contracts_by_line.items()
+        }
         for copy in analysis.get("copies", []):
             name = _clean_name(str(copy.get("name", "")))
             if not name:
@@ -2259,6 +2812,8 @@ def _cobol_relationships(
             validation = str(call.get("validation") or "confirmed")
             confidence = float(call.get("confidence") or (1.0 if validation == "confirmed" else 0.55))
             confidence = min(confidence, parser_cap)
+            call_contract = call_contracts_by_line.get(line_no, {})
+            call_args = [arg["name"] for arg in call_contract.get("arguments", [])]
             if validation == "needs_review":
                 _append_found(
                     found,
@@ -2297,14 +2852,17 @@ def _cobol_relationships(
                             "call_kind": call.get("kind"),
                             "via": call.get("via"),
                             "parser_effective": parser.get("effective"),
-                            "using": using_by_line.get(line_no, []),
+                            "using": call_args or using_by_line.get(line_no, []),
                             "interface_contract": {
-                                "caller_using": using_by_line.get(line_no, []),
-                                "contract_status": "observed" if using_by_line.get(line_no) else "not_declared",
+                                "caller_using": call_args or using_by_line.get(line_no, []),
+                                "arguments": call_contract.get("arguments", []),
+                                "contract_status": "observed" if call_args or using_by_line.get(line_no) else "not_declared",
                             },
                         },
                     ),
                 )
+        for rel in _interface_contract_relationships(item, source, analysis, parser_cap):
+            _append_found(found, seen, rel)
         for sql in analysis.get("sql", []):
             op = str(sql.get("op", "")).upper()
             rel_type = "READS_TABLE" if op == "READS" else "WRITES_TABLE" if op == "WRITES" else ""
@@ -2447,6 +3005,47 @@ def _cobol_relationships(
     return found
 
 
+def _selected_data_dictionary_items(
+    item: ClassifiedMember,
+    analysis: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    data_items = list(analysis.get("data_items", []) or [])
+    if len(data_items) <= DATA_DICTIONARY_GRAPH_LIMIT:
+        return data_items, {
+            "data_dictionary_projection": "complete",
+            "projected_data_item_count": len(data_items),
+            "source_data_item_count": len(data_items),
+            "data_dictionary_truncated": False,
+        }
+    references = _program_field_reference_names(analysis, item)
+    selected: list[dict[str, Any]] = []
+    selected_names: set[str] = set()
+    for data_item in data_items:
+        name = _clean_name(str(data_item.get("name", "")))
+        if not name or name in selected_names:
+            continue
+        section = str(data_item.get("section") or "").upper()
+        level = str(data_item.get("level") or "").zfill(2)
+        if (
+            section == "LINKAGE"
+            or level in {"01", "77"}
+            or _copybook_field_is_referenced(name, name, references)
+        ):
+            selected.append(data_item)
+            selected_names.add(name)
+        if len(selected) >= DATA_DICTIONARY_GRAPH_LIMIT:
+            break
+    if not selected:
+        selected = data_items[:DATA_DICTIONARY_GRAPH_LIMIT]
+    return selected, {
+        "data_dictionary_projection": "bounded_used_fields",
+        "projected_data_item_count": len(selected),
+        "source_data_item_count": len(data_items),
+        "data_dictionary_truncated": len(data_items) > len(selected),
+        "data_dictionary_graph_limit": DATA_DICTIONARY_GRAPH_LIMIT,
+    }
+
+
 def _data_dictionary_relationships(
     item: ClassifiedMember,
     source: Asset,
@@ -2454,7 +3053,8 @@ def _data_dictionary_relationships(
     parser_cap: float,
 ) -> list[FoundRelationship]:
     found: list[FoundRelationship] = []
-    for data_item in analysis.get("data_items", [])[:FIELD_FLOW_LIMIT]:
+    selected_data_items, selection_attrs = _selected_data_dictionary_items(item, analysis)
+    for data_item in selected_data_items:
         name = _clean_name(str(data_item.get("name", "")))
         if not name:
             continue
@@ -2477,6 +3077,7 @@ def _data_dictionary_relationships(
                 "usage": data_item.get("usage"),
                 "value": data_item.get("value"),
                 "condition_name": data_item.get("condition_name"),
+                **selection_attrs,
             },
         )
         found.append(
@@ -2911,25 +3512,103 @@ def _cics_contract_relationships(
                 attributes={"verb": verb, "data_contract": contract},
             )
         )
-        for key in ("commarea", "resp", "resp2", "length"):
+        if contract.get("commarea"):
+            found.append(
+                _found_existing(
+                    item,
+                    source,
+                    "DEFINES_COMMAREA_CONTRACT",
+                    contract_asset,
+                    line_no,
+                    _line_at(item.lines, line_no),
+                    confidence=min(0.80, parser_cap),
+                    validation_status="inferred",
+                    discovery_method="cics-contract-extractor",
+                    attributes={"verb": verb, "data_contract": contract, "commarea": contract.get("commarea")},
+                )
+            )
+        layout_children = _layout_children_by_parent(analysis)
+        for key in ("commarea", "resp", "resp2", "length", "channel", "container"):
             value = contract.get(key)
             if not value or str(value).isdigit():
                 continue
+            field_name = _clean_name(str(value))
             found.append(
                 _found_existing(
                     item,
                     contract_asset,
                     "CONTRACT_USES_FIELD",
-                    _field_asset(item.member.run_id, source.technical_name, str(value), confidence=0.74, validation_status="inferred"),
+                    _field_asset(item.member.run_id, source.technical_name, field_name, confidence=0.74, validation_status="inferred"),
                     line_no,
                     _line_at(item.lines, line_no),
                     confidence=0.74,
                     validation_status="inferred",
                     discovery_method="cics-contract-extractor",
-                    attributes={"contract_role": key, "verb": verb},
+                    attributes={"contract_role": key, "verb": verb, "field": field_name, "line": line_no},
                 )
             )
+            if key == "commarea":
+                for child in layout_children.get(field_name, []):
+                    child_name = _clean_name(str(child.get("name") or ""))
+                    if not child_name or child_name == field_name:
+                        continue
+                    found.append(
+                        _found_existing(
+                            item,
+                            contract_asset,
+                            "COMMAREA_CONTAINS_FIELD",
+                            _field_asset(
+                                item.member.run_id,
+                                source.technical_name,
+                                child_name,
+                                confidence=0.72,
+                                validation_status="inferred",
+                                attributes={
+                                    "commarea": field_name,
+                                    "level": child.get("level"),
+                                    "pic": child.get("pic"),
+                                    "parent_field": child.get("parent"),
+                                },
+                            ),
+                            int(child.get("line") or line_no),
+                            _line_at(item.lines, int(child.get("line") or line_no)),
+                            confidence=0.72,
+                            validation_status="inferred",
+                            discovery_method="cics-contract-extractor",
+                            attributes={
+                                "contract_role": "commarea_child",
+                                "verb": verb,
+                                "commarea": field_name,
+                                "field": child_name,
+                                "parent_field": child.get("parent"),
+                                "line": int(child.get("line") or line_no),
+                            },
+                        )
+                    )
     return found
+
+
+def _layout_children_by_parent(analysis: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    children: dict[str, list[dict[str, Any]]] = {}
+    stack: list[dict[str, Any]] = []
+    for row in analysis.get("data_items", []) or []:
+        name = _clean_name(str(row.get("name") or ""))
+        if not name:
+            continue
+        level = int(row.get("level") or 0)
+        while stack and int(stack[-1].get("level") or 0) >= level:
+            stack.pop()
+        parent = _clean_name(str(stack[-1].get("name") or "")) if stack else ""
+        enriched = dict(row)
+        enriched["name"] = name
+        enriched["parent"] = parent
+        if parent:
+            for ancestor in stack:
+                ancestor_name = _clean_name(str(ancestor.get("name") or ""))
+                if ancestor_name:
+                    children.setdefault(ancestor_name, []).append(enriched)
+        stack.append(enriched)
+    return children
 
 
 def _iter_exec_cics_blocks(text: str) -> list[dict[str, Any]]:
@@ -3277,19 +3956,365 @@ def _sort_merge_relationships(item: ClassifiedMember, source: Asset) -> list[Fou
     return found
 
 
+def _interface_contract_relationships(
+    item: ClassifiedMember,
+    source: Asset,
+    analysis: dict[str, Any],
+    parser_cap: float,
+) -> list[FoundRelationship]:
+    found: list[FoundRelationship] = []
+    entry_args = _procedure_using_args(item.text)
+    linkage_fields = _linkage_top_level_fields(analysis)
+    contract_args = entry_args or linkage_fields
+    if contract_args:
+        entry = _interface_contract_asset(
+            item.member.run_id,
+            source.technical_name,
+            "ENTRY",
+            0,
+            source.technical_name,
+            {"contract_kind": "program_entry", "procedure_using": entry_args, "linkage_fields": linkage_fields},
+            confidence=min(0.86, parser_cap),
+        )
+        line_no = _line_for_text(item.lines, "PROCEDURE DIVISION") or 1
+        found.append(
+            _found_existing(
+                item,
+                source,
+                "DECLARES_ENTRY_CONTRACT",
+                entry,
+                line_no,
+                _line_at(item.lines, line_no),
+                confidence=min(0.86, parser_cap),
+                validation_status="inferred",
+                discovery_method="interface-contract-extractor",
+                attributes=entry.attributes,
+            )
+        )
+        for position, arg in enumerate(contract_args, 1):
+            field = _field_asset(item.member.run_id, source.technical_name, arg["name"], confidence=0.78, validation_status="inferred")
+            attrs = {
+                "contract_kind": "program_entry",
+                "argument_position": position,
+                "argument_name": arg["name"],
+                "field": arg["name"],
+                "mode": arg.get("mode") or "REFERENCE",
+            }
+            found.append(
+                _found_existing(
+                    item,
+                    entry,
+                    "ENTRY_CONTRACT_USES_FIELD",
+                    field,
+                    int(arg.get("line") or line_no),
+                    _line_at(item.lines, int(arg.get("line") or line_no)),
+                    confidence=0.78,
+                    validation_status="inferred",
+                    discovery_method="interface-contract-extractor",
+                    attributes=attrs,
+                )
+            )
+            found.append(
+                _found_existing(
+                    item,
+                    entry,
+                    "CONTRACT_USES_FIELD",
+                    field,
+                    int(arg.get("line") or line_no),
+                    _line_at(item.lines, int(arg.get("line") or line_no)),
+                    confidence=0.78,
+                    validation_status="inferred",
+                    discovery_method="interface-contract-extractor",
+                    attributes={**attrs, "contract_role": "entry_argument"},
+                )
+            )
+
+    for line_no, call_contract in _call_contracts_by_line(item.lines).items():
+        target = call_contract.get("target")
+        args = call_contract.get("arguments", [])
+        if not target or not args:
+            continue
+        contract = _interface_contract_asset(
+            item.member.run_id,
+            source.technical_name,
+            "CALL",
+            line_no,
+            str(target),
+            {"contract_kind": "call_site", "target_program": target, "arguments": args},
+            confidence=min(0.84, parser_cap),
+        )
+        line = _line_at(item.lines, line_no)
+        found.append(
+            _found_existing(
+                item,
+                source,
+                "DEFINES_CALL_CONTRACT",
+                contract,
+                line_no,
+                line,
+                confidence=min(0.84, parser_cap),
+                validation_status="inferred",
+                discovery_method="interface-contract-extractor",
+                attributes=contract.attributes,
+            )
+        )
+        found.append(
+            _found_existing(
+                item,
+                contract,
+                "CALL_CONTRACT_TARGETS",
+                _asset(item.member.run_id, "PROGRAM", str(target), confidence=0.80, validation_status="inferred"),
+                line_no,
+                line,
+                confidence=0.80,
+                validation_status="inferred",
+                discovery_method="interface-contract-extractor",
+                attributes={"target_program": target, "line": line_no},
+            )
+        )
+        for arg in args:
+            position = int(arg.get("position") or 0)
+            field_name = str(arg.get("name") or "")
+            if not field_name:
+                continue
+            field = _field_asset(item.member.run_id, source.technical_name, field_name, confidence=0.78, validation_status="inferred")
+            attrs = {
+                "contract_kind": "call_site",
+                "target_program": target,
+                "argument_position": position,
+                "argument_name": field_name,
+                "field": field_name,
+                "mode": arg.get("mode") or "REFERENCE",
+                "line": line_no,
+            }
+            found.append(
+                _found_existing(
+                    item,
+                    contract,
+                    "CALL_PASSES_FIELD",
+                    field,
+                    line_no,
+                    line,
+                    confidence=0.78,
+                    validation_status="inferred",
+                    discovery_method="interface-contract-extractor",
+                    attributes=attrs,
+                )
+            )
+            found.append(
+                _found_existing(
+                    item,
+                    contract,
+                    "CONTRACT_USES_FIELD",
+                    field,
+                    line_no,
+                    line,
+                    confidence=0.78,
+                    validation_status="inferred",
+                    discovery_method="interface-contract-extractor",
+                    attributes={**attrs, "contract_role": "call_argument"},
+                )
+            )
+    return found
+
+
+def _call_argument_mapping_relationships(
+    members: list[ClassifiedMember],
+    member_assets: dict[str, Asset],
+    cobol_analysis: dict[str, dict[str, Any]],
+) -> list[FoundRelationship]:
+    found: list[FoundRelationship] = []
+    programs_by_name: dict[str, tuple[ClassifiedMember, Asset, dict[str, Any]]] = {}
+    for item in members:
+        analysis = cobol_analysis.get(item.member.member_id)
+        if not analysis:
+            continue
+        asset = member_assets[item.member.member_id]
+        if asset.asset_type == "PROGRAM":
+            programs_by_name[_clean_name(asset.technical_name)] = (item, asset, analysis)
+
+    for item in members:
+        analysis = cobol_analysis.get(item.member.member_id)
+        if not analysis:
+            continue
+        caller = member_assets[item.member.member_id]
+        for line_no, call_contract in _call_contracts_by_line(item.lines).items():
+            target = _clean_name(str(call_contract.get("target") or ""))
+            callee_tuple = programs_by_name.get(target)
+            if not target or callee_tuple is None:
+                continue
+            _, callee, callee_analysis = callee_tuple
+            caller_args = call_contract.get("arguments", [])
+            callee_args = _procedure_using_args("\n".join(callee_analysis.get("source_lines", []))) or _linkage_top_level_fields(callee_analysis)
+            if not callee_args:
+                continue
+            line = _line_at(item.lines, line_no)
+            for position, caller_arg in enumerate(caller_args, 1):
+                if position > len(callee_args):
+                    break
+                caller_field_name = _clean_name(str(caller_arg.get("name") or ""))
+                callee_field_name = _clean_name(str(callee_args[position - 1].get("name") or ""))
+                if not caller_field_name or not callee_field_name:
+                    continue
+                caller_field = _field_asset(item.member.run_id, caller.technical_name, caller_field_name, confidence=0.72, validation_status="inferred")
+                callee_field = _field_asset(item.member.run_id, callee.technical_name, callee_field_name, confidence=0.72, validation_status="inferred")
+                found.append(
+                    FoundRelationship(
+                        relationship_type="CALL_ARGUMENT_MAPS_TO_LINKAGE",
+                        source_asset_id=caller_field.asset_id,
+                        source_asset=caller_field,
+                        target=callee_field,
+                        evidence=Evidence(
+                            source_path=item.member.relative_path,
+                            line_start=line_no,
+                            line_end=line_no,
+                            evidence_text=line.strip()[:500],
+                            extractor=EXTRACTOR,
+                            discovery_method="interface-contract-extractor",
+                            confidence=0.72,
+                            validation_status="inferred",
+                        ),
+                        confidence=0.72,
+                        validation_status="inferred",
+                        discovery_method="interface-contract-extractor",
+                        attributes={
+                            "caller_program": caller.technical_name,
+                            "callee_program": callee.technical_name,
+                            "call_line": line_no,
+                            "argument_position": position,
+                            "caller_field": caller_field_name,
+                            "callee_field": callee_field_name,
+                            "mapping_basis": "positional_call_using_to_procedure_linkage",
+                        },
+                    )
+                )
+    return found
+
+
+def _interface_contract_asset(
+    run_id: str,
+    program_name: str,
+    kind: str,
+    line_no: int,
+    target: str,
+    attributes: dict[str, Any],
+    *,
+    confidence: float,
+) -> Asset:
+    program = _clean_name(program_name)
+    contract_kind = _clean_name(kind)
+    target_name = _clean_name(target)
+    digest = stable_id("interface_contract", program, contract_kind, line_no, target_name, attributes)
+    return Asset(
+        run_id=run_id,
+        asset_type="INTERFACE_CONTRACT",
+        technical_name=f"{program}::{contract_kind}::{line_no}::{target_name}::{digest}",
+        display_name=f"{contract_kind} {target_name}",
+        confidence=confidence,
+        validation_status="inferred",
+        discovery_method="interface-contract-extractor",
+        attributes={"program": program, "line": line_no, **attributes},
+    )
+
+
 def _call_using_by_line(lines: tuple[str, ...]) -> dict[int, list[str]]:
-    using: dict[int, list[str]] = {}
-    for line_no, line in enumerate(lines, 1):
-        match = re.search(r"\bCALL\s+(?:['\"][A-Z0-9#$@_-]+['\"]|[A-Z0-9#$@_-]+)\s+USING\s+(.+?)(?:\.|$)", line, re.I)
+    return {
+        line_no: [arg["name"] for arg in contract.get("arguments", [])]
+        for line_no, contract in _call_contracts_by_line(lines).items()
+    }
+
+
+def _call_contracts_by_line(lines: tuple[str, ...]) -> dict[int, dict[str, Any]]:
+    contracts: dict[int, dict[str, Any]] = {}
+    for statement in _cobol_logical_statements(lines):
+        text = statement["text"]
+        match = re.search(
+            r"\bCALL\s+(?:['\"]([A-Z0-9#$@_-]+)['\"]|([A-Z][A-Z0-9#$@_-]+))(?:\s+USING\s+(.+))?",
+            text,
+            re.I | re.S,
+        )
         if not match:
             continue
-        args = [
-            _clean_name(part)
-            for part in re.split(r"[\s,]+", match.group(1))
-            if part and part.upper() not in {"BY", "REFERENCE", "CONTENT", "VALUE"}
-        ]
-        using[line_no] = [arg for arg in args if arg]
-    return using
+        target = _clean_name(match.group(1) or match.group(2) or "")
+        args_text = match.group(3) or ""
+        contracts[int(statement["line"])] = {
+            "target": target,
+            "arguments": _parse_using_arguments(args_text, int(statement["line"])),
+            "text": text,
+        }
+    return contracts
+
+
+def _procedure_using_args(text: str) -> list[dict[str, Any]]:
+    match = re.search(r"\bPROCEDURE\s+DIVISION(?:\s+USING\s+(.+?))?\.", text, re.I | re.S)
+    if not match or not match.group(1):
+        return []
+    line_no = _line_for_offset(text, match.start())
+    return _parse_using_arguments(match.group(1), line_no)
+
+
+def _parse_using_arguments(text: str, line_no: int) -> list[dict[str, Any]]:
+    cleaned = re.sub(r"\.", " ", text)
+    tokens = [_clean_name(token) for token in re.findall(r"[A-Z0-9#$@_-]+", cleaned, re.I)]
+    args: list[dict[str, Any]] = []
+    mode = "REFERENCE"
+    skip_next_mode = False
+    for token in tokens:
+        if not token:
+            continue
+        if token == "BY":
+            skip_next_mode = True
+            continue
+        if token in {"REFERENCE", "CONTENT", "VALUE"}:
+            mode = token
+            skip_next_mode = False
+            continue
+        if skip_next_mode:
+            skip_next_mode = False
+        if token in {"ADDRESS", "LENGTH", "OMITTED", "NULL"}:
+            continue
+        args.append({"position": len(args) + 1, "name": token, "mode": mode, "line": line_no})
+    return args
+
+
+def _linkage_top_level_fields(analysis: dict[str, Any]) -> list[dict[str, Any]]:
+    fields = []
+    for row in analysis.get("data_items", []) or []:
+        if str(row.get("section") or "").upper() != "LINKAGE":
+            continue
+        if int(row.get("level") or 0) not in {1, 77}:
+            continue
+        name = _clean_name(str(row.get("name") or ""))
+        if name:
+            fields.append({"position": len(fields) + 1, "name": name, "mode": "REFERENCE", "line": int(row.get("line") or 1)})
+    return fields
+
+
+def _cobol_logical_statements(lines: tuple[str, ...]) -> list[dict[str, Any]]:
+    statements: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    in_procedure = False
+    for line_no, line in enumerate(lines, 1):
+        if _is_cobol_comment(line):
+            continue
+        upper = line.upper()
+        if "PROCEDURE DIVISION" in upper:
+            in_procedure = True
+        if not in_procedure:
+            continue
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if current is None:
+            current = {"line": line_no, "text": stripped}
+        else:
+            current["text"] = f"{current['text']} {stripped}"
+        if "." in stripped:
+            statements.append(current)
+            current = None
+    if current is not None:
+        statements.append(current)
+    return statements
 
 
 def _cics_data_contract(line: str) -> dict[str, Any]:
@@ -4804,6 +5829,135 @@ def _append_found(
         return
     seen.add(key)
     found.append(rel)
+
+
+def _with_dataset_identity_relationships(
+    item: ClassifiedMember,
+    relationships: list[FoundRelationship],
+) -> list[FoundRelationship]:
+    found = list(relationships)
+    seen: set[tuple[str, str, str, str]] = set()
+    for rel in relationships:
+        _append_found([], seen, rel)
+    for rel in relationships:
+        if rel.target.asset_type != "DATASET":
+            continue
+        attrs = _dataset_identity_attrs(rel.target.technical_name, rel.attributes or {})
+        identity = _dataset_identity_asset(
+            item.member.run_id,
+            attrs["canonical_dataset"],
+            confidence=min(rel.confidence, attrs["identity_confidence"]),
+            validation_status=attrs["identity_status"],
+            attributes=attrs,
+        )
+        line_no = rel.evidence.line_start or 1
+        line = _line_at(item.lines, line_no)
+        _append_found(
+            found,
+            seen,
+            FoundRelationship(
+                relationship_type="NORMALIZES_TO_DATASET_IDENTITY",
+                source_asset_id=rel.target.asset_id,
+                source_asset=rel.target,
+                target=identity,
+                evidence=Evidence(
+                    source_path=item.member.relative_path,
+                    line_start=line_no,
+                    line_end=rel.evidence.line_end,
+                    evidence_text=(rel.evidence.evidence_text or line.strip())[:500],
+                    extractor=EXTRACTOR,
+                    discovery_method="dataset-identity-normalizer",
+                    confidence=min(rel.confidence, attrs["identity_confidence"]),
+                    validation_status=attrs["identity_status"],
+                ),
+                confidence=min(rel.confidence, attrs["identity_confidence"]),
+                validation_status=attrs["identity_status"],
+                discovery_method="dataset-identity-normalizer",
+                attributes=attrs,
+            ),
+        )
+        mapped_rel = _dataset_identity_relationship_type(rel.relationship_type)
+        if mapped_rel:
+            _append_found(
+                found,
+                seen,
+                FoundRelationship(
+                    relationship_type=mapped_rel,
+                    source_asset_id=rel.source_asset_id,
+                    source_asset=rel.source_asset,
+                    target=identity,
+                    evidence=Evidence(
+                        source_path=item.member.relative_path,
+                        line_start=line_no,
+                        line_end=rel.evidence.line_end,
+                        evidence_text=(rel.evidence.evidence_text or line.strip())[:500],
+                        extractor=EXTRACTOR,
+                        discovery_method="dataset-identity-normalizer",
+                        confidence=min(rel.confidence, attrs["identity_confidence"]),
+                        validation_status=attrs["identity_status"],
+                    ),
+                    confidence=min(rel.confidence, attrs["identity_confidence"]),
+                    validation_status=attrs["identity_status"],
+                    discovery_method="dataset-identity-normalizer",
+                    attributes={**attrs, "source_relationship_type": rel.relationship_type},
+                ),
+            )
+    return found
+
+
+def _dataset_identity_relationship_type(relationship_type: str) -> str | None:
+    return {
+        "READS_DATASET": "READS_DATASET_IDENTITY",
+        "WRITES_DATASET": "WRITES_DATASET_IDENTITY",
+        "USES_DATASET": "USES_DATASET_IDENTITY",
+        "BINDS_DATASET": "BINDS_DATASET_IDENTITY",
+    }.get(relationship_type.upper())
+
+
+def _dataset_identity_asset(
+    run_id: str,
+    canonical_dataset: str,
+    *,
+    confidence: float,
+    validation_status: str,
+    attributes: dict[str, Any],
+) -> Asset:
+    canonical = _clean_dataset_name(canonical_dataset)
+    return Asset(
+        run_id=run_id,
+        asset_type="DATASET_IDENTITY",
+        technical_name=canonical,
+        display_name=canonical,
+        confidence=confidence,
+        validation_status=validation_status,
+        discovery_method="dataset-identity-normalizer",
+        attributes=attributes,
+    )
+
+
+def _dataset_identity_attrs(dataset_name: str, rel_attrs: dict[str, Any]) -> dict[str, Any]:
+    raw = _clean_dataset_name(dataset_name)
+    gdg = _jcl_gdg(raw)
+    canonical = gdg["base"] if gdg.get("is_gdg") else raw
+    unresolved_symbolics = sorted(set(_unresolved_symbolics(raw) + list(rel_attrs.get("unresolved_symbolics") or [])))
+    has_symbolics = bool(unresolved_symbolics)
+    status = "needs_review" if has_symbolics else "inferred"
+    confidence = 0.45 if has_symbolics else 0.86
+    return {
+        "raw_dataset": raw,
+        "canonical_dataset": canonical,
+        "normalized_base": canonical,
+        "gdg": gdg,
+        "is_gdg": bool(gdg.get("is_gdg")),
+        "generation": gdg.get("generation"),
+        "unresolved_symbolics": unresolved_symbolics,
+        "has_symbolics": has_symbolics,
+        "dd_name": rel_attrs.get("dd_name"),
+        "disp": rel_attrs.get("disp"),
+        "identity_status": status,
+        "identity_confidence": confidence,
+        "dataset_identity_normalized": not has_symbolics,
+    }
 
 
 def _line_at(lines: tuple[str, ...], line_no: int) -> str:

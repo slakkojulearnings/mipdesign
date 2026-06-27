@@ -204,6 +204,44 @@ CREATE TABLE IF NOT EXISTS enrichment_fact_source (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS runtime_observation (
+    observation_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES run_manifest(run_id) ON DELETE CASCADE,
+    observation_type TEXT NOT NULL,
+    source_asset TEXT NOT NULL,
+    target_asset TEXT NOT NULL,
+    observation_count INTEGER NOT NULL DEFAULT 1,
+    first_seen TEXT,
+    last_seen TEXT,
+    environment TEXT,
+    job TEXT,
+    transaction_id TEXT,
+    source_system TEXT NOT NULL,
+    evidence_json TEXT NOT NULL DEFAULT '{}',
+    imported_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS catalog_dataset (
+    catalog_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES run_manifest(run_id) ON DELETE CASCADE,
+    raw_dataset TEXT NOT NULL,
+    canonical_dataset TEXT NOT NULL,
+    dataset_type TEXT,
+    gdg_base TEXT,
+    vsam_cluster TEXT,
+    volume TEXT,
+    storage_class TEXT,
+    management_class TEXT,
+    record_format TEXT,
+    lrecl TEXT,
+    owner TEXT,
+    application TEXT,
+    catalog_source TEXT NOT NULL,
+    evidence_json TEXT NOT NULL DEFAULT '{}',
+    imported_at TEXT NOT NULL,
+    UNIQUE(run_id, raw_dataset, catalog_source)
+);
+
 CREATE TABLE IF NOT EXISTS insight (
     insight_id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL REFERENCES run_manifest(run_id) ON DELETE CASCADE,
@@ -352,6 +390,8 @@ CREATE INDEX IF NOT EXISTS idx_enrich_member_state ON enrichment_member_status(r
 CREATE INDEX IF NOT EXISTS idx_enrich_member_sha ON enrichment_member_status(run_id, source_sha256);
 CREATE INDEX IF NOT EXISTS idx_enrich_job_run ON enrichment_job(run_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_fact_source_entity ON enrichment_fact_source(run_id, entity_kind, entity_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_observation_run ON runtime_observation(run_id, observation_type, source_asset, target_asset);
+CREATE INDEX IF NOT EXISTS idx_catalog_dataset_run ON catalog_dataset(run_id, canonical_dataset, raw_dataset);
 CREATE INDEX IF NOT EXISTS idx_scan_progress_run ON scan_progress(run_id, phase);
 CREATE INDEX IF NOT EXISTS idx_scan_issue_run_stage ON scan_issue(run_id, stage, severity);
 CREATE INDEX IF NOT EXISTS idx_phase_telemetry_run ON scan_phase_telemetry(run_id, phase);

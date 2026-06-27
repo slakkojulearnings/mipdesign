@@ -10,6 +10,7 @@ from typing import Any, Callable
 from .demo_seed import seed_demo
 from .domain_architecture import DomainArchitectureService
 from .enrichment import EnrichmentService
+from .external_evidence import ExternalEvidenceService
 from .graph_service import GraphService
 from .models import GraphSliceRequest
 from .repositories import SQLiteGraphRepository
@@ -26,6 +27,7 @@ class IntelligenceApi:
         self.graph = GraphService(self.repository)
         self.domain_architecture = DomainArchitectureService(self.repository)
         self.enrichment = EnrichmentService(self.repository)
+        self.external_evidence = ExternalEvidenceService(self.repository)
 
     def init_demo(self) -> dict[str, Any]:
         run_id = seed_demo(self.repository.db_path)
@@ -177,6 +179,7 @@ class IntelligenceApi:
             "checks": checks,
             "stats": stats,
             "enrichment_coverage": enrichment_coverage,
+            "external_evidence": self.external_evidence.evidence_summary(selected),
         }
 
     def enrich(
@@ -204,6 +207,30 @@ class IntelligenceApi:
     def enrichment_coverage(self, run_id: str | None = None) -> dict[str, Any]:
         selected = self.current_run(run_id)
         return {"run_id": selected, "coverage": self.enrichment.coverage(selected)}
+
+    def import_runtime(
+        self,
+        path: str | Path,
+        run_id: str | None = None,
+        *,
+        source_system: str = "runtime",
+    ) -> dict[str, Any]:
+        selected = self.current_run(run_id)
+        return self.external_evidence.import_runtime_calls(selected, path, source_system=source_system)
+
+    def import_catalog(
+        self,
+        path: str | Path,
+        run_id: str | None = None,
+        *,
+        catalog_source: str = "catalog",
+    ) -> dict[str, Any]:
+        selected = self.current_run(run_id)
+        return self.external_evidence.import_catalog(selected, path, catalog_source=catalog_source)
+
+    def external_evidence_summary(self, run_id: str | None = None) -> dict[str, Any]:
+        selected = self.current_run(run_id)
+        return self.external_evidence.evidence_summary(selected)
 
     def parse_status(self, asset: str, run_id: str | None = None) -> dict[str, Any]:
         selected = self.current_run(run_id)
@@ -898,6 +925,26 @@ def create_fastapi_app(db_path: str | Path = "data/mip-intel.db"):
     @app.get("/enrichment/coverage")
     def enrichment_coverage(run_id: str | None = None) -> dict[str, Any]:
         return api.enrichment_coverage(run_id)
+
+    @app.post("/external/runtime")
+    def import_runtime(
+        path: str,
+        run_id: str | None = None,
+        source_system: str = "runtime",
+    ) -> dict[str, Any]:
+        return api.import_runtime(path, run_id, source_system=source_system)
+
+    @app.post("/external/catalog")
+    def import_catalog(
+        path: str,
+        run_id: str | None = None,
+        catalog_source: str = "catalog",
+    ) -> dict[str, Any]:
+        return api.import_catalog(path, run_id, catalog_source=catalog_source)
+
+    @app.get("/external/evidence")
+    def external_evidence(run_id: str | None = None) -> dict[str, Any]:
+        return api.external_evidence_summary(run_id)
 
     @app.get("/parser/status/{asset}")
     def parse_status(asset: str, run_id: str | None = None):

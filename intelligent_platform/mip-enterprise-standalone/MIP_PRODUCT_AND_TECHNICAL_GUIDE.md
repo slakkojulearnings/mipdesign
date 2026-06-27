@@ -117,7 +117,7 @@ MIP stores facts as nodes and directed edges in SQLite.
 
 Common nodes: `PROGRAM`, `JOB`, `STEP`, `COPYBOOK`, `TABLE`, `DB2_COLUMN`, `DATASET`, `FILE`, `TRANSACTION`, `BUSINESS_RULE`, `CICS_CONTRACT`, `IMS_DATABASE`.
 
-Common edges: `CALLS`, `DYNAMIC_CALL`, `USES_COPYBOOK`, `READS_TABLE`, `WRITES_TABLE`, `READS_FILE`, `WRITES_FILE`, `FLOWS_TO`, `EXECUTES`, `CONTAINS_STEP`, `BINDS_DATASET`.
+Common edges: `CALLS`, `DYNAMIC_CALL`, `OBSERVED_CALLS`, `USES_COPYBOOK`, `READS_TABLE`, `WRITES_TABLE`, `READS_FILE`, `WRITES_FILE`, `FLOWS_TO`, `EXECUTES`, `CONTAINS_STEP`, `BINDS_DATASET`, `CATALOG_ALIASES_DATASET`.
 
 Example:
 
@@ -128,6 +128,59 @@ PROGRAM CUST001 -> READS_TABLE -> TABLE CUSTOMER
 ```
 
 Outcome: developers can inspect blast radius, upstream/downstream calls, required files, and data usage from one database.
+
+## 6.1 External Runtime And Catalog Evidence
+
+Static source cannot prove every runtime path. MIP now imports external evidence as separate confirmed facts instead of overwriting static parser facts.
+
+Runtime calls:
+
+```powershell
+python -m mip_intel.cli --db data\mip.db import-runtime runtime_calls.json --source-system smf
+python -m mip_intel.cli --db data\mip.db external-evidence
+```
+
+Example runtime JSON:
+
+```json
+[
+  {
+    "source_program": "CUST001",
+    "target_program": "CUSTVAL",
+    "count": 42,
+    "environment": "PROD",
+    "job": "CUSTJOB"
+  }
+]
+```
+
+Stored fact:
+
+```text
+PROGRAM CUST001 -> OBSERVED_CALLS -> PROGRAM CUSTVAL
+```
+
+Catalog datasets:
+
+```powershell
+python -m mip_intel.cli --db data\mip.db import-catalog catalog.csv --catalog-source idcams
+```
+
+Example CSV:
+
+```csv
+raw_dataset,canonical_dataset,dataset_type,owner,application
+CARD.AUTH.OUT(+1),CARD.AUTH.OUT,GDG,CARDS,CARD-AUTH
+```
+
+Stored facts:
+
+```text
+DATASET CARD.AUTH.OUT(+1) -> CATALOG_ALIASES_DATASET -> DATASET_IDENTITY CARD.AUTH.OUT
+DATASET_IDENTITY CARD.AUTH.OUT -> CATALOG_DESCRIBES_DATASET -> DATASET CARD.AUTH.OUT(+1)
+```
+
+Outcome: runtime-only calls and catalog truth become durable graph evidence, visible in CLI/API/UI coverage, without corrupting source-derived `CALLS` or dataset facts.
 
 ## 7. Graph Slices, Workbench, And Exports
 
@@ -144,7 +197,7 @@ python -m mip_intel.cli --db data\mip.db export-bundle CUST001 --output out\cust
 
 UI views:
 
-- Dashboard: scan status, root drivers, clusters, parser coverage.
+- Dashboard: scan status, root drivers, clusters, parser coverage, external runtime/catalog evidence.
 - Graph Slice: bounded node/edge view with direction and relationship filters.
 - Matrix: compact heatmaps for large relationships.
 - 360 Workbench: call graph, dependency graph, flow diagram, required files, AST.
@@ -155,18 +208,28 @@ Outcome: users navigate from search or a root driver into focused evidence inste
 
 ## 8. Modernization And Decision Grade
 
-MIP proposes bounded contexts and Java service candidates from graph evidence. These are intentionally not final decisions until critical facts are present.
+MIP proposes bounded contexts and Java service candidates from graph evidence. Decision-grade status is now based on normalized graph facts, not broad proxies.
 
 Decision-grade gates:
 
 ```text
-CALL USING + LINKAGE contracts
-CICS COMMAREA / channel / container contracts
-dataset identity normalization
-bounded copybook layout
+CALL USING + LINKAGE contracts are modeled as INTERFACE_CONTRACT nodes.
+CICS COMMAREA / channel / container contracts are linked to fields.
+Dataset references normalize to DATASET_IDENTITY nodes.
+COPY REPLACING sites materialize bounded copybook layout fields.
 ```
 
-Until all gates pass, service candidates and roadmap items carry:
+Example facts:
+
+```text
+PROGRAM CALLER -> DEFINES_CALL_CONTRACT -> INTERFACE_CONTRACT
+FIELD CALLER::AUTH-REC -> CALL_ARGUMENT_MAPS_TO_LINKAGE -> FIELD AUTHSVC::LK-REQ
+CICS_CONTRACT -> COMMAREA_CONTAINS_FIELD -> FIELD CALLER::AUTH-NO
+DATASET CARD.AUTH.OUT(+1) -> NORMALIZES_TO_DATASET_IDENTITY -> DATASET_IDENTITY CARD.AUTH.OUT
+COPY_SITE -> COPY_SITE_DECLARES_FIELD -> FIELD CALLER::AUTH-NO
+```
+
+If a context does not contain all required facts, service candidates and roadmap items carry:
 
 ```json
 {
@@ -199,16 +262,27 @@ Implemented and working:
 - Persistent enrichment schema and `mip enrich` job.
 - Parser status in CLI/API/UI.
 - Stable relationship identity for enrichment supersession.
+- Bounded copybook layout via `COPY_SITE`, `COPY_SITE_DECLARES_FIELD`, and `MATERIALIZES_COPYBOOK_FIELD`.
+- CALL USING/LINKAGE contracts via `INTERFACE_CONTRACT`, `CALL_PASSES_FIELD`, `ENTRY_CONTRACT_USES_FIELD`, and `CALL_ARGUMENT_MAPS_TO_LINKAGE`.
+- CICS COMMAREA contracts via `DEFINES_COMMAREA_CONTRACT`, `CONTRACT_USES_FIELD`, and `COMMAREA_CONTAINS_FIELD`.
+- Dataset identity normalization via `DATASET_IDENTITY` and `*_DATASET_IDENTITY` relationships.
+- Runtime observation import via `OBSERVED_CALLS`.
+- Catalog reconciliation import via `CATALOG_DESCRIBES_DATASET` and `CATALOG_ALIASES_DATASET`.
+- Graph/coverage/UI visibility for external runtime/catalog evidence.
+- Bounded per-site copybook field projection: small copybooks stay complete; large copybooks materialize used fields plus top-level context.
+- Bounded program data-dictionary graph projection while preserving the full parser payload in node attributes.
+- Batched SQLite persistence for scan members, nodes, edges, and evidence.
 - Enrichment coverage rollup in validation and dashboard.
 - Decision-grade warning on architecture outputs.
 - Required-files, graph slice, call graph, dependency graph, AST, exports, scorecards, corrections, and telemetry remain available.
 
-Still not decision-grade for Java decomposition:
+Still needs enterprise hardening:
 
-- Bounded copybook layout is designed but not fully materialized as separate `CopyExpansionSite` nodes.
-- CALL USING/LINKAGE and CICS COMMAREA extraction exist partially but still need stricter contract modeling.
-- Dataset identity normalization exists for several paths but still needs estate-grade reconciliation across COBOL FD, JCL DD, VSAM, IMS, and catalog metadata.
-- Full ANTLR success depends on dialect coverage; failures are persisted and visible instead of hidden.
+- ANTLR success remains dialect-dependent; failures are persisted and visible instead of hidden.
+- Catalog reconciliation works when catalog metadata is supplied. Full enterprise truth still depends on the quality and completeness of external catalog/CMDB/SMF feeds.
+- Interface mapping is positional for static calls where caller and callee are in the same scan; unresolved dynamic calls stay `needs_review`.
+- Runtime observed calls can be imported, but runtime-only behavior such as scheduler overrides, generated JCL, or dynamically constructed program names still depends on available runtime evidence.
+- Large-estate performance is improved by bounded projection and batched writes, but should still be benchmarked against a representative 200K-file estate before calling the storage tier complete.
 
 ## 11. Quick Start
 
@@ -228,6 +302,7 @@ Useful checks:
 ```powershell
 python -m mip_intel.cli --db data\mip.db parse-status CUST001
 python -m mip_intel.cli --db data\mip.db enrichment-coverage
+python -m mip_intel.cli --db data\mip.db external-evidence
 python -m mip_intel.cli --db data\mip.db required-files CUST001
 ```
 
