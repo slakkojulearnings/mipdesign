@@ -1,0 +1,246 @@
+<title>MIP — Living Estate Map (POC)</title>
+<style>
+  :root{
+    --bg0:#06121A;--bg1:#0B1F24;--text:#E9E3D4;--muted:rgba(233,227,212,.6);
+    --amber:#E7A23C;--mint:#57C9A4;--ice:#9BD7FF;--violet:#B98CFF;--coral:#FF9F6B;--alert:#E8663D;
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,monospace;
+    --sans:-apple-system,"Segoe UI",system-ui,sans-serif;
+  }
+  *{margin:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--text);font-family:var(--sans)}
+  canvas{position:fixed;inset:0;display:block;cursor:grab}
+  canvas:active{cursor:grabbing}
+  .hud{position:fixed;pointer-events:none;font-family:var(--mono);z-index:5}
+  .title{top:18px;left:22px;letter-spacing:.18em}
+  .title b{color:var(--amber);font-weight:700;font-size:15px}
+  .title small{display:block;color:var(--muted);font-size:11px;letter-spacing:.22em;margin-top:4px}
+  .stats{top:18px;right:22px;text-align:right;font-size:11px;letter-spacing:.12em;color:var(--muted);line-height:1.8}
+  .stats b{color:var(--text)}
+  .legend{bottom:74px;left:22px;font-size:11px;letter-spacing:.08em;color:var(--muted);line-height:1.85}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:middle}
+  .hint{bottom:20px;left:22px;font-size:11px;color:var(--muted);letter-spacing:.1em}
+  .controls{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:10;display:flex;gap:10px}
+  .controls button{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+    background:rgba(231,162,60,.08);border:1px solid rgba(231,162,60,.4);color:var(--amber);
+    padding:11px 16px;border-radius:9px;cursor:pointer;transition:background .2s,border-color .2s}
+  .controls button:hover{background:rgba(231,162,60,.18);border-color:var(--amber)}
+  .controls button.bk{color:var(--alert);background:rgba(232,102,61,.08);border-color:rgba(232,102,61,.4)}
+  .controls button.bk:hover{background:rgba(232,102,61,.18)}
+  .controls button.rs{color:var(--muted);background:transparent;border-color:var(--muted)}
+  #info{position:fixed;top:64px;right:22px;width:264px;z-index:8;font-family:var(--mono);font-size:12px;
+    background:rgba(11,31,36,.92);border:1px solid rgba(233,227,212,.16);border-left:3px solid var(--amber);
+    border-radius:10px;padding:16px 18px;display:none;line-height:1.55}
+  #info .nm{font-family:var(--sans);font-weight:700;font-size:16px;color:var(--text);margin-bottom:8px}
+  #info .r{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-top:1px dashed rgba(233,227,212,.14);color:var(--muted)}
+  #info .r span:last-child{color:var(--text)}
+  #banner{position:fixed;bottom:120px;left:50%;transform:translateX(-50%);z-index:9;font-family:var(--mono);
+    font-size:13px;letter-spacing:.06em;color:var(--text);background:rgba(11,31,36,.9);border:1px solid rgba(233,227,212,.16);
+    padding:10px 18px;border-radius:8px;display:none;max-width:80vw;text-align:center}
+  #banner b{color:var(--amber)} #banner.bk b{color:var(--alert)}
+  :focus-visible{outline:2px solid var(--amber);outline-offset:3px}
+</style>
+
+<canvas id="cv"></canvas>
+<div class="hud title"><b>MIP // LIVE ESTATE MAP</b><small>card-processing twin · proof of concept</small></div>
+<div class="hud stats" id="stats"></div>
+<div class="hud legend" id="legend"></div>
+<div class="hud hint">drag to orbit · scroll to zoom · click a node</div>
+<div id="info"></div>
+<div id="banner"></div>
+<div class="controls">
+  <button id="bTrace">▸ Trace journey</button>
+  <button id="bBack" class="bk">◂ Backtrack</button>
+  <button id="bImpact">◌ Impact</button>
+  <button id="bReset" class="rs">reset</button>
+</div>
+
+<script>
+(function(){
+  var cv=document.getElementById('cv'), cx=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var COL={program:'#E7A23C',job:'#9BD7FF',table:'#57C9A4',copybook:'#B98CFF',
+           requirement:'#FF9F6B',target:'#7CF2C0',unresolved:'#E8663D'};
+
+  // ---- the estate (representative card-processing twin) ----
+  var clusters=[
+    {id:'post',name:'Card Posting'}, {id:'auth',name:'Authorization'},
+    {id:'bill',name:'Billing'},      {id:'cust',name:'Customer'}
+  ];
+  var nodes=[
+    // posting (the detailed, story cluster)
+    {id:'DAILYCRD',t:'job',c:'post'},{id:'CRDPOST',t:'program',c:'post',risk:.85},
+    {id:'CRDVAL',t:'program',c:'post'},{id:'BALUPD',t:'program',c:'post'},
+    {id:'FEEPOST',t:'program',c:'post'},{id:'CARD_MASTER',t:'table',c:'post'},
+    {id:'LEDGER',t:'table',c:'post'},{id:'CARDREC',t:'copybook',c:'post'},
+    {id:'WS-RATE-PGM',t:'unresolved',c:'post',lbl:'DYNAMIC:WS-RATE-PGM'},
+    {id:'BR-007',t:'requirement',c:'post',lbl:'BR-007 late fee'},
+    {id:'CardPostingService',t:'target',c:'post',lbl:'CardPostingService (Java)'},
+    // authorization
+    {id:'AUTHDRV',t:'job',c:'auth'},{id:'AUTH',t:'program',c:'auth',risk:.4},{id:'AUTHVAL',t:'program',c:'auth'},
+    {id:'LIMITCHK',t:'program',c:'auth'},{id:'FRAUD',t:'table',c:'auth'},{id:'ACCOUNT',t:'table',c:'auth'},{id:'AUTHREC',t:'copybook',c:'auth'},
+    // billing
+    {id:'BILLGEN',t:'job',c:'bill'},{id:'STMTGEN',t:'program',c:'bill'},{id:'BILLPRT',t:'program',c:'bill',risk:.3},
+    {id:'STATEMENT',t:'table',c:'bill'},{id:'BILLREC',t:'copybook',c:'bill'},
+    // customer
+    {id:'CUSTMNT',t:'program',c:'cust'},{id:'CUSTINQ',t:'program',c:'cust'},{id:'CUSTOMER',t:'table',c:'cust'},{id:'CUSTREC',t:'copybook',c:'cust'}
+  ];
+  var edges=[
+    ['DAILYCRD','CRDPOST','calls'],['CRDPOST','CRDVAL','calls'],['CRDVAL','BALUPD','calls'],
+    ['CRDPOST','FEEPOST','calls'],['CRDPOST','CARD_MASTER','reads'],['BALUPD','CARD_MASTER','writes'],
+    ['FEEPOST','LEDGER','writes'],['CRDPOST','CARDREC','uses'],['CRDPOST','WS-RATE-PGM','dyn'],
+    ['CardPostingService','BR-007','impl'],['BR-007','CRDPOST','from'],
+    ['AUTHDRV','AUTH','calls'],['AUTH','AUTHVAL','calls'],['AUTH','LIMITCHK','calls'],
+    ['AUTH','FRAUD','reads'],['AUTHVAL','ACCOUNT','reads'],['AUTH','AUTHREC','uses'],['AUTH','CARD_MASTER','reads'],
+    ['BILLGEN','STMTGEN','calls'],['STMTGEN','BILLPRT','calls'],['STMTGEN','STATEMENT','writes'],
+    ['STMTGEN','CARD_MASTER','reads'],['STMTGEN','BILLREC','uses'],
+    ['CUSTMNT','CUSTOMER','writes'],['CUSTINQ','CUSTOMER','reads'],['CUSTMNT','CUSTREC','uses'],['AUTHVAL','CUSTOMER','reads']
+  ];
+  // filler stars per cluster for density
+  var fid=0;
+  clusters.forEach(function(cl){ for(var k=0;k<6;k++){ nodes.push({id:'_'+cl.id+(fid++),t:k%3===0?'program':(k%3===1?'copybook':'table'),c:cl.id,filler:true}); } });
+  var ECOL={calls:'#E7A23C',reads:'#57C9A4',writes:'#57C9A4',uses:'#B98CFF',dyn:'#E8663D',impl:'#7CF2C0',from:'#FF9F6B'};
+
+  var byId={}; nodes.forEach(function(n){n.lbl=n.lbl||n.id; byId[n.id]=n;});
+  // ---- 3D layout: clusters on a ring, nodes on a small sphere around each ----
+  var R=240;
+  clusters.forEach(function(cl,i){ var a=i/clusters.length*Math.PI*2; cl.cx=Math.cos(a)*R; cl.cy=(i%2?1:-1)*70; cl.cz=Math.sin(a)*R; });
+  nodes.forEach(function(n){ var cl=clusters.find(function(c){return c.id===n.c;});
+    var u=Math.random()*Math.PI*2, v=Math.acos(2*Math.random()-1), rr=(n.filler?90:62)+Math.random()*30;
+    n.x=cl.cx+rr*Math.sin(v)*Math.cos(u); n.y=cl.cy+rr*Math.cos(v)*0.7; n.z=cl.cz+rr*Math.sin(v)*Math.sin(u);
+    n.base=(n.t==='table'||n.t==='target'?8:n.t==='job'?6.8:n.filler?3.4:6);
+  });
+  // starfield backdrop
+  var stars=[]; for(var s=0;s<260;s++){var u=Math.random()*6.283,v=Math.acos(2*Math.random()-1),rr=520+Math.random()*340;
+    stars.push({x:rr*Math.sin(v)*Math.cos(u),y:rr*Math.cos(v),z:rr*Math.sin(v)*Math.sin(u)});}
+
+  var yaw=0.6,pitch=-0.25,userZoom=1,fitScale=1,W,H,cxr,cyr,DPR;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=window.innerWidth;H=window.innerHeight;            // true viewport (robust)
+    cv.style.width=W+'px';cv.style.height=H+'px';
+    cv.width=W*DPR;cv.height=H*DPR;cx.setTransform(DPR,0,0,DPR,0,0);
+    cxr=W/2;cyr=H/2;
+    var maxR=1; nodes.forEach(function(n){var d=Math.hypot(n.x,n.y,n.z);if(d>maxR)maxR=d;});
+    fitScale=(Math.min(W,H)*0.40)/maxR;                  // always fill the frame, any size
+  }
+  size(); addEventListener('resize',size);
+  var FOV=560;
+  function project(p){ // rotate yaw(Y) then pitch(X), perspective
+    var cyA=Math.cos(yaw),syA=Math.sin(yaw),cxA=Math.cos(pitch),sxA=Math.sin(pitch);
+    var x=p.x*cyA - p.z*syA, z=p.x*syA + p.z*cyA, y=p.y*cxA - z*sxA; z=p.y*sxA + z*cxA;
+    var sc=FOV/(FOV+z)*fitScale*userZoom;
+    return {sx:cxr+x*sc, sy:cyr+y*sc, sc:sc, z:z};
+  }
+
+  // ---- animation state for Trace / Backtrack / Impact ----
+  var anim={active:new Map(), t0:0, kind:null, seq:[], dur:0};
+  function clearAnim(){anim.active.clear();anim.kind=null;anim.seq=[];banner(null);}
+  function runSeq(kind,steps,label){ // steps: [{nodes:[],edges:[[a,b]]}], staggered
+    clearAnim(); anim.kind=kind; anim.t0=performance.now(); anim.seq=steps; anim.step=380;
+    banner(label, kind==='back');
+  }
+  function edgeKey(a,b){return a+'>'+b;}
+  // forward daily-posting journey
+  var TRACE=[['DAILYCRD'],['DAILYCRD','CRDPOST'],['CRDPOST'],['CRDPOST','CRDVAL'],['CRDVAL'],
+    ['CRDVAL','BALUPD'],['BALUPD'],['BALUPD','CARD_MASTER'],['CRDPOST','FEEPOST'],['FEEPOST'],['FEEPOST','LEDGER']];
+  // backtrack: target issue -> requirement -> COBOL cause
+  var BACK=[['CardPostingService'],['CardPostingService','BR-007'],['BR-007'],['BR-007','CRDPOST'],['CRDPOST']];
+  function toSteps(arr){return arr.map(function(e){return e.length===1?{nodes:e,edges:[]}:{nodes:[],edges:[[e[0],e[1]]]};});}
+
+  function impact(root){ // BFS ripple from a node
+    clearAnim(); anim.kind='impact'; anim.t0=performance.now(); anim.step=240;
+    var seen={},depth={},q=[root];seen[root]=1;depth[root]=0;var steps=[];
+    while(q.length){var cur=q.shift();(steps[depth[cur]]=steps[depth[cur]]||{nodes:[],edges:[]}).nodes.push(cur);
+      edges.forEach(function(e){if(e[0]===cur&&!seen[e[1]]){seen[e[1]]=1;depth[e[1]]=depth[cur]+1;q.push(e[1]);
+        (steps[depth[cur]].edges).push([e[0],e[1]]);}});}
+    anim.seq=steps; banner('IMPACT · '+root+' → '+(Object.keys(seen).length-1)+' downstream assets',false);
+  }
+  function activation(now){ // returns map id/edge -> brightness 0..1
+    var m=new Map(); if(!anim.kind)return m;
+    anim.seq.forEach(function(st,i){ var at=anim.t0+i*anim.step; var b=Math.max(0,Math.min(1,(now-at)/300));
+      if(b<=0)return; st.nodes.forEach(function(n){m.set(n,Math.max(m.get(n)||0,b));});
+      st.edges.forEach(function(e){m.set(edgeKey(e[0],e[1]),Math.max(m.get(edgeKey(e[0],e[1]))||0,b));}); });
+    return m;
+  }
+  function banner(txt,bk){var b=document.getElementById('banner'); if(!txt){b.style.display='none';return;}
+    b.innerHTML=txt; b.className=bk?'bk':''; b.style.display='block';}
+
+  var hover=null, sel=null, lastProj={};
+  function frame(now){
+    if(!reduce && !dragging) yaw+=0.0016;
+    cx.clearRect(0,0,W,H);
+    var g=cx.createRadialGradient(cxr,cyr*0.7,40,cxr,cyr,Math.max(W,H)*0.75);
+    g.addColorStop(0,'#0B2730');g.addColorStop(1,'#06121A');cx.fillStyle=g;cx.fillRect(0,0,W,H);
+    // stars
+    stars.forEach(function(p){var q=project(p);if(q.z>-FOV){cx.fillStyle='rgba(233,227,212,'+(0.04+0.06*q.sc)+')';cx.fillRect(q.sx,q.sy,1.2,1.2);}});
+    var act=activation(now);
+    // project nodes, depth sort
+    var P=nodes.map(function(n){var q=project(n);return {n:n,q:q};}).sort(function(a,b){return b.q.z-a.q.z;});
+    lastProj={};
+    // edges first (so nodes overlay)
+    edges.forEach(function(e){var A=byId[e[0]],B=byId[e[1]];if(!A||!B)return;var pa=project(A),pb=project(B);
+      var k=edgeKey(e[0],e[1]),hot=act.get(k)||0; var base=0.10+0.10*((pa.sc+pb.sc)/2);
+      cx.strokeStyle=ECOL[e[2]]||'#888'; cx.globalAlpha=hot>0?(0.5+0.5*hot):base*0.7; cx.lineWidth=hot>0?2.2:0.7;
+      cx.beginPath();cx.moveTo(pa.sx,pa.sy);cx.lineTo(pb.sx,pb.sy);cx.stroke();});
+    cx.globalAlpha=1;
+    // nodes
+    P.forEach(function(o){var n=o.n,q=o.q;if(q.z<=-FOV)return; var col=COL[n.t]||'#ccc';
+      var hot=act.get(n.id)||0; var r=(n.base)*q.sc*(1+1.4*hot);
+      var riskPulse=n.risk?(0.5+0.5*Math.sin(now/360)):0;
+      lastProj[n.id]={x:q.sx,y:q.sy,r:Math.max(r,5)};
+      // glow
+      var gr=cx.createRadialGradient(q.sx,q.sy,0,q.sx,q.sy,r*4.5);
+      gr.addColorStop(0,col); gr.addColorStop(0.3,col+'55'); gr.addColorStop(1,'transparent');
+      cx.globalAlpha=(n.filler?0.10:0.20)+0.5*hot+0.18*riskPulse; cx.fillStyle=gr;
+      cx.beginPath();cx.arc(q.sx,q.sy,r*4.5,0,6.283);cx.fill();
+      // core
+      cx.globalAlpha=Math.min(1,(n.filler?0.5:0.85)+hot); cx.fillStyle=hot>0?'#FFF7E6':col;
+      cx.beginPath();cx.arc(q.sx,q.sy,r,0,6.283);cx.fill();
+      if(n.risk){cx.globalAlpha=0.3+0.4*riskPulse;cx.strokeStyle=COL.unresolved;cx.lineWidth=1.4;
+        cx.beginPath();cx.arc(q.sx,q.sy,r+4+2*riskPulse,0,6.283);cx.stroke();}
+      // labels for important/hovered/selected
+      if((!n.filler && q.sc>0.78) || hover===n.id || sel===n.id || hot>0.5){
+        cx.globalAlpha=Math.min(1,0.5+q.sc*0.5); cx.fillStyle='#E9E3D4';
+        cx.font='11px ui-monospace,Consolas,monospace'; cx.textAlign='center';
+        cx.fillText(n.lbl,q.sx,q.sy-r-7);}
+      cx.globalAlpha=1;
+    });
+    // HUD scan line
+    if(!reduce){var sy=(now/22)%H; cx.strokeStyle='rgba(155,215,255,0.05)';cx.lineWidth=1;cx.beginPath();cx.moveTo(0,sy);cx.lineTo(W,sy);cx.stroke();}
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ---- interaction ----
+  var dragging=false,lx,ly;
+  cv.addEventListener('pointerdown',function(e){dragging=true;lx=e.clientX;ly=e.clientY;cv.setPointerCapture(e.pointerId);});
+  cv.addEventListener('pointerup',function(e){dragging=false; // click = select if barely moved
+    var hit=pick(e.clientX,e.clientY); if(hit&&Math.abs(e.clientX-(lx||0))<4){selectNode(hit);} });
+  cv.addEventListener('pointermove',function(e){
+    if(dragging){yaw+=(e.clientX-lx)*0.006;pitch+=(e.clientY-ly)*0.006;pitch=Math.max(-1.4,Math.min(1.4,pitch));lx=e.clientX;ly=e.clientY;}
+    else{var h=pick(e.clientX,e.clientY);hover=h;cv.style.cursor=h?'pointer':'grab';}});
+  cv.addEventListener('wheel',function(e){e.preventDefault();userZoom=Math.max(0.4,Math.min(4,userZoom*(e.deltaY<0?1.08:0.93)));},{passive:false});
+  function pick(mx,my){var best=null,bd=1e9;for(var id in lastProj){var p=lastProj[id];var d=Math.hypot(mx-p.x,my-p.y);if(d<p.r+8&&d<bd){bd=d;best=id;}}return best;}
+  function selectNode(id){sel=id;var n=byId[id];var ins=document.getElementById('info');
+    var outs=edges.filter(function(e){return e[0]===id;}).map(function(e){return e[2]+'→'+e[1];});
+    var conf=n.t==='requirement'?'0.6 inferred':n.t==='unresolved'?'0.30 needs_review':n.t==='target'?'candidate':'0.95 confirmed';
+    ins.innerHTML='<div class="nm">'+n.lbl+'</div>'+
+      '<div class="r"><span>type</span><span>'+n.t+'</span></div>'+
+      '<div class="r"><span>confidence</span><span>'+conf+'</span></div>'+
+      (n.risk?'<div class="r"><span>flag</span><span style="color:#E8663D">bottleneck · COMP-3 rounding</span></div>':'')+
+      '<div class="r"><span>links</span><span>'+(outs.length?outs.slice(0,4).join(', '):'—')+'</span></div>';
+    ins.style.display='block';}
+
+  document.getElementById('bTrace').onclick=function(){selectNode('DAILYCRD');runSeq('trace',toSteps(TRACE),'FORWARD · daily card posting journey · <b>DAILYCRD → CRDPOST → CRDVAL → BALUPD → CARD_MASTER</b>');};
+  document.getElementById('bBack').onclick=function(){selectNode('CardPostingService');runSeq('back',toSteps(BACK),'BACKTRACK · Java output off by a penny → <b>BR-007</b> → <b>CRDPOST.cbl:17</b> (COMP-3 rounding) — fix here');};
+  document.getElementById('bImpact').onclick=function(){selectNode('CRDPOST');impact('CRDPOST');};
+  document.getElementById('bReset').onclick=function(){clearAnim();sel=null;document.getElementById('info').style.display='none';userZoom=1;yaw=0.6;pitch=-0.25;};
+
+  // HUD legend + stats
+  document.getElementById('legend').innerHTML=[['program','program'],['job','job'],['table','data store'],
+    ['copybook','copybook'],['requirement','requirement'],['target','rebuilt (Java)'],['unresolved','needs review']]
+    .map(function(x){return '<i style="background:'+COL[x[0]]+'"></i>'+x[1];}).join('<br>');
+  var np=nodes.filter(function(n){return !n.filler;}).length;
+  document.getElementById('stats').innerHTML='<b>'+np+'</b> assets · <b>'+edges.length+'</b> links<br><b>4</b> capabilities · <b>1</b> bottleneck<br>baseline + enrichment';
+})();
+</script>

@@ -47,7 +47,11 @@
       "Bash(PYTHONPATH=src python -m mip_intel.cli --db data/_jd.db init-demo)",
       "Bash(PYTHONPATH=src python journey-discovery/export_evidence.py --db data/_jd.db --out data/_jd_evidence)",
       "Skill(artifact-design)",
-      "Skill(artifact-design:*)"
+      "Skill(artifact-design:*)",
+      "Bash(PYTHONPATH=src python C:/Users/srika/AppData/Local/Temp/assess_enrich.py)",
+      "Bash(rm -rf data/_asmt.db data/_asmt.db-wal data/_asmt.db-shm data/_asmt_estate)",
+      "Bash(rm -f C:/Users/srika/AppData/Local/Temp/assess_enrich.py)",
+      "Bash(grep -ohE '\"[A-Z][A-Z0-9_]{3,}\"' src/mip_intel/ingestion.py src/mip_intel/enrichment.py)"
     ],
     "additionalDirectories": [
       "C:\\Users\\srika\\AppData\\Local\\Temp"
