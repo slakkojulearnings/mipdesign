@@ -51,7 +51,8 @@
       "Bash(PYTHONPATH=src python C:/Users/srika/AppData/Local/Temp/assess_enrich.py)",
       "Bash(rm -rf data/_asmt.db data/_asmt.db-wal data/_asmt.db-shm data/_asmt_estate)",
       "Bash(rm -f C:/Users/srika/AppData/Local/Temp/assess_enrich.py)",
-      "Bash(grep -ohE '\"[A-Z][A-Z0-9_]{3,}\"' src/mip_intel/ingestion.py src/mip_intel/enrichment.py)"
+      "Bash(grep -ohE '\"[A-Z][A-Z0-9_]{3,}\"' src/mip_intel/ingestion.py src/mip_intel/enrichment.py)",
+      "Bash(grep -nA4 'add_parser\\\\\\(\"\\(import-runtime|import-catalog|external-evidence\\)\"' src/mip_intel/cli.py)"
     ],
     "additionalDirectories": [
       "C:\\Users\\srika\\AppData\\Local\\Temp"

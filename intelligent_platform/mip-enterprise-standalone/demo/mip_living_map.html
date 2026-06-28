@@ -51,6 +51,7 @@
   <button id="bTrace">▸ Trace journey</button>
   <button id="bBack" class="bk">◂ Backtrack</button>
   <button id="bImpact">◌ Impact</button>
+  <button id="bMq">⇄ MQ flow</button>
   <button id="bReset" class="rs">reset</button>
 </div>
 
@@ -59,7 +60,8 @@
   var cv=document.getElementById('cv'), cx=cv.getContext('2d');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   var COL={program:'#E7A23C',job:'#9BD7FF',table:'#57C9A4',copybook:'#B98CFF',
-           requirement:'#FF9F6B',target:'#7CF2C0',unresolved:'#E8663D'};
+           requirement:'#FF9F6B',target:'#7CF2C0',unresolved:'#E8663D',
+           transaction:'#FFCC66',queue:'#FF6AD5'};
 
   // ---- the estate (representative card-processing twin) ----
   var clusters=[
@@ -75,6 +77,9 @@
     {id:'WS-RATE-PGM',t:'unresolved',c:'post',lbl:'DYNAMIC:WS-RATE-PGM'},
     {id:'BR-007',t:'requirement',c:'post',lbl:'BR-007 late fee'},
     {id:'CardPostingService',t:'target',c:'post',lbl:'CardPostingService (Java)'},
+    {id:'PAYIN',t:'transaction',c:'post',lbl:'PAYIN (online txn)'},
+    {id:'PAY.REQUEST',t:'queue',c:'post'},{id:'PAY.REPLY',t:'queue',c:'post'},
+    {id:'PAYPROC',t:'program',c:'post',risk:.45},
     // authorization
     {id:'AUTHDRV',t:'job',c:'auth'},{id:'AUTH',t:'program',c:'auth',risk:.4},{id:'AUTHVAL',t:'program',c:'auth'},
     {id:'LIMITCHK',t:'program',c:'auth'},{id:'FRAUD',t:'table',c:'auth'},{id:'ACCOUNT',t:'table',c:'auth'},{id:'AUTHREC',t:'copybook',c:'auth'},
@@ -89,6 +94,8 @@
     ['CRDPOST','FEEPOST','calls'],['CRDPOST','CARD_MASTER','reads'],['BALUPD','CARD_MASTER','writes'],
     ['FEEPOST','LEDGER','writes'],['CRDPOST','CARDREC','uses'],['CRDPOST','WS-RATE-PGM','dyn'],
     ['CardPostingService','BR-007','impl'],['BR-007','CRDPOST','from'],
+    ['PAYIN','PAY.REQUEST','wq'],['PAY.REQUEST','PAYPROC','trig'],['PAYPROC','PAY.REQUEST','rq'],
+    ['PAYPROC','CARD_MASTER','writes'],['PAYPROC','PAY.REPLY','wq'],
     ['AUTHDRV','AUTH','calls'],['AUTH','AUTHVAL','calls'],['AUTH','LIMITCHK','calls'],
     ['AUTH','FRAUD','reads'],['AUTHVAL','ACCOUNT','reads'],['AUTH','AUTHREC','uses'],['AUTH','CARD_MASTER','reads'],
     ['BILLGEN','STMTGEN','calls'],['STMTGEN','BILLPRT','calls'],['STMTGEN','STATEMENT','writes'],
@@ -98,7 +105,7 @@
   // filler stars per cluster for density
   var fid=0;
   clusters.forEach(function(cl){ for(var k=0;k<6;k++){ nodes.push({id:'_'+cl.id+(fid++),t:k%3===0?'program':(k%3===1?'copybook':'table'),c:cl.id,filler:true}); } });
-  var ECOL={calls:'#E7A23C',reads:'#57C9A4',writes:'#57C9A4',uses:'#B98CFF',dyn:'#E8663D',impl:'#7CF2C0',from:'#FF9F6B'};
+  var ECOL={calls:'#E7A23C',reads:'#57C9A4',writes:'#57C9A4',uses:'#B98CFF',dyn:'#E8663D',impl:'#7CF2C0',from:'#FF9F6B',wq:'#FF6AD5',rq:'#57C9A4',trig:'#FF6AD5'};
 
   var byId={}; nodes.forEach(function(n){n.lbl=n.lbl||n.id; byId[n.id]=n;});
   // ---- 3D layout: clusters on a ring, nodes on a small sphere around each ----
@@ -145,6 +152,7 @@
     ['CRDVAL','BALUPD'],['BALUPD'],['BALUPD','CARD_MASTER'],['CRDPOST','FEEPOST'],['FEEPOST'],['FEEPOST','LEDGER']];
   // backtrack: target issue -> requirement -> COBOL cause
   var BACK=[['CardPostingService'],['CardPostingService','BR-007'],['BR-007'],['BR-007','CRDPOST'],['CRDPOST']];
+  var MQFLOW=[['PAYIN'],['PAYIN','PAY.REQUEST'],['PAY.REQUEST'],['PAY.REQUEST','PAYPROC'],['PAYPROC'],['PAYPROC','PAY.REQUEST'],['PAYPROC','CARD_MASTER'],['PAYPROC','PAY.REPLY'],['PAY.REPLY']];
   function toSteps(arr){return arr.map(function(e){return e.length===1?{nodes:e,edges:[]}:{nodes:[],edges:[[e[0],e[1]]]};});}
 
   function impact(root){ // BFS ripple from a node
@@ -234,11 +242,12 @@
   document.getElementById('bTrace').onclick=function(){selectNode('DAILYCRD');runSeq('trace',toSteps(TRACE),'FORWARD · daily card posting journey · <b>DAILYCRD → CRDPOST → CRDVAL → BALUPD → CARD_MASTER</b>');};
   document.getElementById('bBack').onclick=function(){selectNode('CardPostingService');runSeq('back',toSteps(BACK),'BACKTRACK · Java output off by a penny → <b>BR-007</b> → <b>CRDPOST.cbl:17</b> (COMP-3 rounding) — fix here');};
   document.getElementById('bImpact').onclick=function(){selectNode('CRDPOST');impact('CRDPOST');};
+  document.getElementById('bMq').onclick=function(){selectNode('PAYIN');runSeq('trace',toSteps(MQFLOW),'ASYNC MQ · <b>PAYIN</b> MQPUTs to <b>PAY.REQUEST</b> → the message triggers <b>PAYPROC</b> (a root driver) → MQGET → posts CARD_MASTER → reply to PAY.REPLY. PAYIN never waited.');};
   document.getElementById('bReset').onclick=function(){clearAnim();sel=null;document.getElementById('info').style.display='none';userZoom=1;yaw=0.6;pitch=-0.25;};
 
   // HUD legend + stats
   document.getElementById('legend').innerHTML=[['program','program'],['job','job'],['table','data store'],
-    ['copybook','copybook'],['requirement','requirement'],['target','rebuilt (Java)'],['unresolved','needs review']]
+    ['copybook','copybook'],['transaction','online txn'],['queue','MQ queue'],['requirement','requirement'],['target','rebuilt (Java)'],['unresolved','needs review']]
     .map(function(x){return '<i style="background:'+COL[x[0]]+'"></i>'+x[1];}).join('<br>');
   var np=nodes.filter(function(n){return !n.filler;}).length;
   document.getElementById('stats').innerHTML='<b>'+np+'</b> assets · <b>'+edges.length+'</b> links<br><b>4</b> capabilities · <b>1</b> bottleneck<br>baseline + enrichment';

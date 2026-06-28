@@ -247,3 +247,47 @@ because you cannot safely rebuild what you have not first understood and proven.
 
 *In one line: MIP turns a feared, unreadable mainframe into an understood, evidence-backed map — and
 the engine that rebuilds it in Java/Python and proves the result is right.*
+
+---
+
+## Appendix A — How messaging (IBM MQ) works, in plain words
+*Many mainframe programs don't call each other directly — they pass messages through MQ. Here's the whole idea, and how MIP sees it.*
+
+**A `CALL` is a phone call; MQ is posting a letter.** A `CALL` makes both programs run at the same
+moment and the caller waits. With MQ, a program drops a message in a **queue** (a named mailbox) and
+walks away; another program picks it up *later*. They never have to run at the same time —
+**asynchronous**.
+
+**The pieces (post-office analogy):**
+- **Queue** = a mailbox at a known address (the queue name). *MIP shows it as an `MQ_QUEUE` node.*
+- **Queue Manager** = the post office that runs the mailboxes and carries the mail.
+- **Message** = the letter. **MQMD** = the envelope (to/from, priority, tracking number, "registered?").
+  **Payload** = the contents (usually a COBOL record).
+- **MQPUT** = drop the letter (MIP edge `WRITES_QUEUE`). **MQGET** = take the letter (`READS_QUEUE`).
+- **Persistence** = registered mail — survives a crash. **ReplyToQ** = the return address.
+  **CorrelId** = the tracking number that ties a reply back to its request.
+
+**How a message starts a program (the event):** a queue can be set to **trigger**. When a message
+arrives, the queue manager raises a flag (a *trigger message*); a **trigger monitor** (CKTI for CICS,
+or a batch monitor) sees it and **starts the program/transaction** named in a PROCESS definition. So a
+message arriving is a **front door** — the program it starts has no caller in the code, which makes it
+a **root driver**, just like a JCL job or a CICS screen.
+
+**Example (card payment):**
+1. Online transaction **PAYIN** takes a payment, `MQPUT`s it to **PAY.REQUEST**, and returns the
+   screen *instantly*.
+2. The message **triggers** **PAYPROC**.
+3. **PAYPROC** `MQGET`s it, posts to **CARD_MASTER**, and `MQPUT`s a confirmation to **PAY.REPLY**.
+
+The customer's screen came back in step 1; the posting happened later in step 3 — that's the point.
+
+```
+ PAYIN ──MQPUT──► PAY.REQUEST ──trigger──► (monitor) ──starts──► PAYPROC ──► CARD_MASTER
+ (online, returns instantly)    (queue)                          (root driver) ──MQPUT──► PAY.REPLY
+```
+
+**How MIP captures it:** `PAYIN —WRITES_QUEUE→ PAY.REQUEST —TRIGGERS→ PAYPROC —READS_QUEUE→
+PAY.REQUEST`, and `PAYPROC —WRITES_TABLE→ CARD_MASTER`. Seeing `COPY CMQMDV` also tells MIP "this
+program does MQ." **Why it matters:** the producer and consumer are linked *only* through the queue +
+trigger — miss that link and two systems look unrelated when one silently feeds the other. (Watch it
+animate in the Living Map — the **⇄ MQ flow** button.)
